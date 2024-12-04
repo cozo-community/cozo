@@ -132,11 +132,7 @@ impl<'a> SessionTx<'a> {
             }
             FtsExpr::And(ls) => {
                 let mut l_iter = ls.iter();
-                let mut res = self.fts_search_impl(
-                    l_iter.next().unwrap(),
-                    config,
-                    n,
-                )?;
+                let mut res = self.fts_search_impl(l_iter.next().unwrap(), config, n)?;
                 for nxt in l_iter {
                     let nxt_res = self.fts_search_impl(nxt, config, n)?;
                     res = res
@@ -218,10 +214,7 @@ impl<'a> SessionTx<'a> {
             }
             FtsExpr::Not(fst, snd) => {
                 let mut res = self.fts_search_impl(fst, config, n)?;
-                for el in self
-                    .fts_search_impl(snd, config, n)?
-                    .keys()
-                {
+                for el in self.fts_search_impl(snd, config, n)?.keys() {
                     res.remove(el);
                 }
                 res
@@ -263,10 +256,7 @@ impl<'a> SessionTx<'a> {
         } else {
             0
         };
-        let mut result: Vec<_> = self
-            .fts_search_impl(&ast, config, n)?
-            .into_iter()
-            .collect();
+        let mut result: Vec<_> = self.fts_search_impl(&ast, config, n)?.into_iter().collect();
         result.sort_by_key(|(_, score)| Reverse(OrderedFloat(*score)));
         if config.filter.is_none() {
             result.truncate(config.k);

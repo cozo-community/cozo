@@ -58,10 +58,10 @@ pub use runtime::db::NamedRows;
 pub use runtime::relation::decode_tuple_from_kv;
 pub use runtime::temp_store::RegularTempStore;
 pub use storage::mem::{new_cozo_mem, MemStorage};
-#[cfg(feature = "storage-rocksdb")]
-pub use storage::rocks::{new_cozo_rocksdb, RocksDbStorage};
 #[cfg(feature = "storage-new-rocksdb")]
 pub use storage::newrocks::{new_cozo_newrocksdb, NewRocksDbStorage};
+#[cfg(feature = "storage-rocksdb")]
+pub use storage::rocks::{new_cozo_rocksdb, RocksDbStorage};
 #[cfg(feature = "storage-sled")]
 pub use storage::sled::{new_cozo_sled, SledStorage};
 #[cfg(feature = "storage-sqlite")]

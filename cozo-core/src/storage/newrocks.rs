@@ -84,9 +84,7 @@ pub struct NewRocksDbStorage {
 
 impl NewRocksDbStorage {
     pub(crate) fn new(db: OptimisticTransactionDB) -> Self {
-        Self {
-            db: Arc::new(db)
-        }
+        Self { db: Arc::new(db) }
     }
 }
 
@@ -99,7 +97,7 @@ impl<'s> Storage<'s> for NewRocksDbStorage {
 
     fn transact(&'s self, _write: bool) -> Result<Self::Tx> {
         Ok(NewRocksDbTx {
-            db_tx: Some(self.db.transaction())
+            db_tx: Some(self.db.transaction()),
         })
     }
 
@@ -137,7 +135,8 @@ impl<'s> StoreTx<'s> for NewRocksDbTx<'s> {
             .as_ref()
             .ok_or_else(|| miette!("Transaction already committed"))?;
 
-        db_tx.get(key)
+        db_tx
+            .get(key)
             .into_diagnostic()
             .wrap_err("failed to get value")
     }
@@ -148,7 +147,8 @@ impl<'s> StoreTx<'s> for NewRocksDbTx<'s> {
             .as_mut()
             .ok_or_else(|| miette!("Transaction already committed"))?;
 
-        db_tx.put(key, val)
+        db_tx
+            .put(key, val)
             .into_diagnostic()
             .wrap_err("failed to put value")
     }

@@ -27,7 +27,9 @@ fn insert_data(db: &DbInstance) {
         "plain".to_string(),
         NamedRows {
             headers: vec!["k".to_string(), "v".to_string()],
-            rows: (0..10000).map(|i| vec![DataValue::from(i as i64), DataValue::from(i as i64)]).collect_vec(),
+            rows: (0..10000)
+                .map(|i| vec![DataValue::from(i as i64), DataValue::from(i as i64)])
+                .collect_vec(),
             next: None,
         },
     );
@@ -41,11 +43,13 @@ fn insert_data(db: &DbInstance) {
         NamedRows {
             headers: vec!["k".to_string(), "vld".to_string(), "v".to_string()],
             rows: (0..10000)
-                .map(|i| vec![
-                    DataValue::from(i as i64),
-                    DataValue::Validity(Validity::from((0, true))),
-                    DataValue::from(i as i64),
-                ])
+                .map(|i| {
+                    vec![
+                        DataValue::from(i as i64),
+                        DataValue::Validity(Validity::from((0, true))),
+                        DataValue::from(i as i64),
+                    ]
+                })
                 .collect_vec(),
             next: None,
         },
@@ -60,11 +64,15 @@ fn insert_data(db: &DbInstance) {
         NamedRows {
             headers: vec!["k".to_string(), "vld".to_string(), "v".to_string()],
             rows: (0..10000)
-                .flat_map(|i| (0..10).map(move |vld| vec![
-                    DataValue::from(i as i64),
-                    DataValue::Validity(Validity::from((vld, true))),
-                    DataValue::from(i as i64),
-                ]))
+                .flat_map(|i| {
+                    (0..10).map(move |vld| {
+                        vec![
+                            DataValue::from(i as i64),
+                            DataValue::Validity(Validity::from((vld, true))),
+                            DataValue::from(i as i64),
+                        ]
+                    })
+                })
                 .collect_vec(),
             next: None,
         },
@@ -79,11 +87,15 @@ fn insert_data(db: &DbInstance) {
         NamedRows {
             headers: vec!["k".to_string(), "vld".to_string(), "v".to_string()],
             rows: (0..10000)
-                .flat_map(|i| (0..100).map(move |vld| vec![
-                    DataValue::from(i as i64),
-                    DataValue::Validity(Validity::from((vld, true))),
-                    DataValue::from(i as i64),
-                ]))
+                .flat_map(|i| {
+                    (0..100).map(move |vld| {
+                        vec![
+                            DataValue::from(i as i64),
+                            DataValue::Validity(Validity::from((vld, true))),
+                            DataValue::from(i as i64),
+                        ]
+                    })
+                })
                 .collect_vec(),
             next: None,
         },
@@ -99,11 +111,13 @@ fn insert_data(db: &DbInstance) {
             headers: vec!["k".to_string(), "vld".to_string(), "v".to_string()],
             rows: (0..10000)
                 .flat_map(|i| {
-                    (0..1000).map(move |vld| vec![
-                        DataValue::from(i as i64),
-                        DataValue::Validity((vld, true).into()),
-                        DataValue::from(i as i64),
-                    ])
+                    (0..1000).map(move |vld| {
+                        vec![
+                            DataValue::from(i as i64),
+                            DataValue::Validity((vld, true).into()),
+                            DataValue::from(i as i64),
+                        ]
+                    })
                 })
                 .collect_vec(),
             next: None,

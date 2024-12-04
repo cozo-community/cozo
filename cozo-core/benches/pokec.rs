@@ -269,7 +269,10 @@ fn single_edge_write() {
             {?[fr, to] <- [[$i, $j]] :put friends {fr, to}}
             {?[fr, to] <- [[$i, $j]] :put friends.rev {fr, to}}
             "#,
-                BTreeMap::from([("i".to_string(), DataValue::from(i as i64)), ("j".to_string(), DataValue::from(j as i64))]),
+                BTreeMap::from([
+                    ("i".to_string(), DataValue::from(i as i64)),
+                    ("j".to_string(), DataValue::from(j as i64)),
+                ]),
             )
             .is_ok()
         {
