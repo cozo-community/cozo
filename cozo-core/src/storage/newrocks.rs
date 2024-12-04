@@ -86,7 +86,7 @@ pub struct NewRocksDbStorage {
 
 impl NewRocksDbStorage {
     pub(crate) fn new(db: OptimisticTransactionDB) -> Self {
-        Self { 
+        Self {
             db: Arc::new(db)
         }
     }
@@ -100,8 +100,8 @@ impl<'s> Storage<'s> for NewRocksDbStorage {
     }
 
     fn transact(&'s self, _write: bool) -> Result<Self::Tx> {
-        Ok(NewRocksDbTx { 
-            db_tx: Some(self.db.transaction()) 
+        Ok(NewRocksDbTx {
+            db_tx: Some(self.db.transaction())
         })
     }
 
@@ -136,7 +136,7 @@ impl<'s> StoreTx<'s> for NewRocksDbTx<'s> {
     fn get(&self, key: &[u8], _for_update: bool) -> Result<Option<Vec<u8>>> {
         let db_tx = self.db_tx.as_ref()
             .ok_or_else(|| miette!("Transaction already committed"))?;
-            
+
         db_tx.get(key)
             .into_diagnostic()
             .wrap_err("failed to get value")
@@ -145,7 +145,7 @@ impl<'s> StoreTx<'s> for NewRocksDbTx<'s> {
     fn put(&mut self, key: &[u8], val: &[u8]) -> Result<()> {
         let db_tx = self.db_tx.as_mut()
             .ok_or_else(|| miette!("Transaction already committed"))?;
-            
+
         db_tx.put(key, val)
             .into_diagnostic()
             .wrap_err("failed to put value")
@@ -360,7 +360,7 @@ impl<'a> Iterator for NewRocksDbSkipIterator<'a> {
 
     fn next(&mut self) -> Option<Self::Item> {
         loop {
-            self.inner.set_mode(rocksdb::IteratorMode::From(&self.next_bound, rocksdb::Direction::Forward));
+            self.inner.set_mode(rocksdb::IteratorMode::From(&self.upper_bound, rocksdb::Direction::Forward));
             match self.inner.next() {
                 None => return None,
                 Some(Ok((k_slice, v_slice))) => {
@@ -369,7 +369,7 @@ impl<'a> Iterator for NewRocksDbSkipIterator<'a> {
                     }
 
                     let (ret, nxt_bound) = check_key_for_validity(k_slice.as_ref(), self.valid_at, None);
-                    self.next_bound = nxt_bound;
+                    self.upper_bound = nxt_bound;
                     if let Some(mut tup) = ret {
                         extend_tuple_from_v(&mut tup, v_slice.as_ref());
                         return Some(Ok(tup));
@@ -414,7 +414,7 @@ mod tests {
     fn setup_test_db() -> Result<(TempDir, Db<NewRocksDbStorage>)> {
         let temp_dir = TempDir::new().into_diagnostic()?;
         let db = new_cozo_newrocksdb(temp_dir.path())?;
-        
+
         // Create test tables with proper ScriptMutability parameter
         db.run_script(
             r#"
@@ -452,7 +452,7 @@ mod tests {
             Default::default(),
             ScriptMutability::Immutable,
         )?;
-        
+
         assert_eq!(result.rows.len(), 1);
         assert_eq!(result.rows[0][0], DataValue::from(10));
 
@@ -471,12 +471,12 @@ mod tests {
                 rows: vec![
                     vec![
                         DataValue::from(1),
-                        DataValue::Validity(Validity::from((0, true))),
+                        DataValue::Validity(Validity::from((1, true))),
                         DataValue::from(100),
                     ],
                     vec![
                         DataValue::from(1),
-                        DataValue::Validity(Validity::from((1, true))),
+                        DataValue::Validity(Validity::from((2, true))),
                         DataValue::from(200),
                     ],
                 ],
@@ -487,14 +487,14 @@ mod tests {
 
         // Query at different timestamps
         let result = db.run_script(
-            "?[v] := *tt_test{k: 1, v @ 0}",
+            "?[v] := *tt_test{k: 1, v @ 1}",
             Default::default(),
             ScriptMutability::Immutable,
         )?;
         assert_eq!(result.rows[0][0], DataValue::from(100));
 
         let result = db.run_script(
-            "?[v] := *tt_test{k: 1, v @ 1}",
+            "?[v] := *tt_test{k: 1, v @ 2}",
             Default::default(),
             ScriptMutability::Immutable,
         )?;
@@ -527,7 +527,7 @@ mod tests {
             Default::default(),
             ScriptMutability::Immutable,
         )?;
-        
+
         assert_eq!(result.rows.len(), 4);
         assert_eq!(result.rows[0][0], DataValue::from(3));
         assert_eq!(result.rows[3][0], DataValue::from(6));
