@@ -5,7 +5,7 @@ use std::sync::Arc;
 use log::info;
 use miette::{miette, IntoDiagnostic, Result, WrapErr};
 
-use rocksdb::{OptimisticTransactionDB, Options, WriteBatchWithTransaction, DB};
+use rust_rocksdb::{OptimisticTransactionDB, Options, WriteBatchWithTransaction, DB};
 
 use crate::data::tuple::{check_key_for_validity, Tuple};
 use crate::data::value::ValidityTs;
@@ -123,7 +123,7 @@ impl<'s> Storage<'s> for NewRocksDbStorage {
 }
 
 pub struct NewRocksDbTx<'a> {
-    db_tx: Option<rocksdb::Transaction<'a, OptimisticTransactionDB>>,
+    db_tx: Option<rust_rocksdb::Transaction<'a, OptimisticTransactionDB>>,
 }
 
 unsafe impl<'a> Sync for NewRocksDbTx<'a> {}
@@ -193,9 +193,9 @@ impl<'s> StoreTx<'s> for NewRocksDbTx<'s> {
     fn del_range_from_persisted(&mut self, lower: &[u8], upper: &[u8]) -> Result<()> {
         match self.db_tx {
             Some(ref mut db_tx) => {
-                let iter = db_tx.iterator(rocksdb::IteratorMode::From(
+                let iter = db_tx.iterator(rust_rocksdb::IteratorMode::From(
                     lower,
-                    rocksdb::Direction::Forward,
+                    rust_rocksdb::Direction::Forward,
                 ));
                 for item in iter {
                     let (k, _) = item
@@ -246,9 +246,9 @@ impl<'s> StoreTx<'s> for NewRocksDbTx<'s> {
     {
         match &self.db_tx {
             Some(db_tx) => Box::new(NewRocksDbIterator {
-                inner: db_tx.iterator(rocksdb::IteratorMode::From(
+                inner: db_tx.iterator(rust_rocksdb::IteratorMode::From(
                     lower,
-                    rocksdb::Direction::Forward,
+                    rust_rocksdb::Direction::Forward,
                 )),
                 upper_bound: upper.to_vec(),
             }),
@@ -266,9 +266,9 @@ impl<'s> StoreTx<'s> for NewRocksDbTx<'s> {
     ) -> Box<dyn Iterator<Item = Result<Tuple>> + 'a> {
         match self.db_tx {
             Some(ref db_tx) => Box::new(NewRocksDbSkipIterator {
-                inner: db_tx.iterator(rocksdb::IteratorMode::From(
+                inner: db_tx.iterator(rust_rocksdb::IteratorMode::From(
                     lower,
-                    rocksdb::Direction::Forward,
+                    rust_rocksdb::Direction::Forward,
                 )),
                 upper_bound: upper.to_vec(),
                 valid_at,
@@ -290,9 +290,9 @@ impl<'s> StoreTx<'s> for NewRocksDbTx<'s> {
     {
         match self.db_tx {
             Some(ref db_tx) => {
-                let iter = db_tx.iterator(rocksdb::IteratorMode::From(
+                let iter = db_tx.iterator(rust_rocksdb::IteratorMode::From(
                     lower,
-                    rocksdb::Direction::Forward,
+                    rust_rocksdb::Direction::Forward,
                 ));
                 Box::new(NewRocksDbIteratorRaw {
                     inner: iter,
@@ -313,9 +313,9 @@ impl<'s> StoreTx<'s> for NewRocksDbTx<'s> {
             .db_tx
             .as_ref()
             .ok_or(miette!("Transaction already committed"))?;
-        let iter = db_tx.iterator(rocksdb::IteratorMode::From(
+        let iter = db_tx.iterator(rust_rocksdb::IteratorMode::From(
             lower,
-            rocksdb::Direction::Forward,
+            rust_rocksdb::Direction::Forward,
         ));
         let count = iter
             .take_while(|item| match item {
@@ -331,7 +331,7 @@ impl<'s> StoreTx<'s> for NewRocksDbTx<'s> {
         's: 'a,
     {
         match self.db_tx {
-            Some(ref db_tx) => Box::new(db_tx.iterator(rocksdb::IteratorMode::Start).map(|item| {
+            Some(ref db_tx) => Box::new(db_tx.iterator(rust_rocksdb::IteratorMode::Start).map(|item| {
                 item.map(|(k, v)| (k.to_vec(), v.to_vec()))
                     .into_diagnostic()
                     .wrap_err_with(|| "Error during total scan")
@@ -344,7 +344,7 @@ impl<'s> StoreTx<'s> for NewRocksDbTx<'s> {
 }
 
 pub(crate) struct NewRocksDbIterator<'a> {
-    inner: rocksdb::DBIteratorWithThreadMode<'a, rocksdb::Transaction<'a, OptimisticTransactionDB>>,
+    inner: rust_rocksdb::DBIteratorWithThreadMode<'a, rust_rocksdb::Transaction<'a, OptimisticTransactionDB>>,
     upper_bound: Vec<u8>,
 }
 
@@ -368,7 +368,7 @@ impl<'a> Iterator for NewRocksDbIterator<'a> {
 }
 
 pub(crate) struct NewRocksDbSkipIterator<'a> {
-    inner: rocksdb::DBIteratorWithThreadMode<'a, rocksdb::Transaction<'a, OptimisticTransactionDB>>,
+    inner: rust_rocksdb::DBIteratorWithThreadMode<'a, rust_rocksdb::Transaction<'a, OptimisticTransactionDB>>,
     upper_bound: Vec<u8>,
     valid_at: ValidityTs,
     next_bound: Vec<u8>,
@@ -379,9 +379,9 @@ impl<'a> Iterator for NewRocksDbSkipIterator<'a> {
 
     fn next(&mut self) -> Option<Self::Item> {
         loop {
-            self.inner.set_mode(rocksdb::IteratorMode::From(
+            self.inner.set_mode(rust_rocksdb::IteratorMode::From(
                 &self.next_bound,
-                rocksdb::Direction::Forward,
+                rust_rocksdb::Direction::Forward,
             ));
             match self.inner.next() {
                 None => return None,
@@ -405,7 +405,7 @@ impl<'a> Iterator for NewRocksDbSkipIterator<'a> {
 }
 
 pub(crate) struct NewRocksDbIteratorRaw<'a> {
-    inner: rocksdb::DBIteratorWithThreadMode<'a, rocksdb::Transaction<'a, OptimisticTransactionDB>>,
+    inner: rust_rocksdb::DBIteratorWithThreadMode<'a, rust_rocksdb::Transaction<'a, OptimisticTransactionDB>>,
     upper_bound: Vec<u8>,
 }
 

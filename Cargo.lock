@@ -682,7 +682,7 @@ checksum = "06ea2b9bc92be3c2baa9334a323ebca2d6f074ff852cd1d7b11064035cd3868f"
 
 [[package]]
 name = "cozo-ce"
-version = "0.7.8"
+version = "0.7.9"
 dependencies = [
  "aho-corasick",
  "approx",
@@ -720,7 +720,7 @@ dependencies = [
  "rmp",
  "rmp-serde",
  "rmpv",
- "rocksdb",
+ "rust-rocksdb",
  "rust-stemmers",
  "rustc-hash",
  "serde",
@@ -746,7 +746,7 @@ dependencies = [
 
 [[package]]
 name = "cozo-ce-bin"
-version = "0.7.8"
+version = "0.7.9"
 dependencies = [
  "async-stream",
  "axum 0.7.5",
@@ -906,25 +906,26 @@ dependencies = [
 
 [[package]]
 name = "cxx"
-version = "1.0.121"
+version = "1.0.133"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "21db378d04296a84d8b7d047c36bb3954f0b46529db725d7e62fb02f9ba53ccc"
+checksum = "05e1ec88093d2abd9cf1b09ffd979136b8e922bf31cad966a8fe0d73233112ef"
 dependencies = [
  "cc",
+ "cxxbridge-cmd",
  "cxxbridge-flags",
  "cxxbridge-macro",
+ "foldhash",
  "link-cplusplus",
 ]
 
 [[package]]
 name = "cxx-build"
-version = "1.0.121"
+version = "1.0.133"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3e5262a7fa3f0bae2a55b767c223ba98032d7c328f5c13fa5cdc980b77fc0658"
+checksum = "9afa390d956ee7ccb41aeed7ed7856ab3ffb4fc587e7216be7e0f83e949b4e6c"
 dependencies = [
  "cc",
  "codespan-reporting",
- "once_cell",
  "proc-macro2",
  "quote",
  "scratch",
@@ -932,19 +933,33 @@ dependencies = [
 ]
 
 [[package]]
-name = "cxxbridge-flags"
-version = "1.0.121"
+name = "cxxbridge-cmd"
+version = "1.0.133"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "be8dcadd2e2fb4a501e1d9e93d6e88e6ea494306d8272069c92d5a9edf8855c0"
+checksum = "3c23bfff654d6227cbc83de8e059d2f8678ede5fc3a6c5a35d5c379983cc61e6"
+dependencies = [
+ "clap",
+ "codespan-reporting",
+ "proc-macro2",
+ "quote",
+ "syn 2.0.60",
+]
+
+[[package]]
+name = "cxxbridge-flags"
+version = "1.0.133"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f7c01b36e22051bc6928a78583f1621abaaf7621561c2ada1b00f7878fbe2caa"
 
 [[package]]
 name = "cxxbridge-macro"
-version = "1.0.121"
+version = "1.0.133"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ad08a837629ad949b73d032c637653d069e909cffe4ee7870b02301939ce39cc"
+checksum = "f6e14013136fac689345d17b9a6df55977251f11d333c0a571e8d963b55e1f95"
 dependencies = [
  "proc-macro2",
  "quote",
+ "rustversion",
  "syn 2.0.60",
 ]
 
@@ -1237,6 +1252,12 @@ name = "fnv"
 version = "1.0.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3f9eec918d3f24069decb9af1554cad7c880e2da24a9afd88aca000531ab82c1"
+
+[[package]]
+name = "foldhash"
+version = "0.1.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f81ec6369c545a7d40e4589b5597581fa1c441fe1cce96dd1de43159910a36a2"
 
 [[package]]
 name = "foreign-types"
@@ -1908,22 +1929,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "librocksdb-sys"
-version = "0.16.0+8.10.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ce3d60bc059831dc1c83903fb45c103f75db65c5a7bf22272764d9cc683e348c"
-dependencies = [
- "bindgen",
- "bzip2-sys",
- "cc",
- "glob",
- "libc",
- "libz-sys",
- "lz4-sys",
- "zstd-sys",
-]
-
-[[package]]
 name = "libz-sys"
 version = "1.1.20"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1988,9 +1993,9 @@ checksum = "90ed8c1e510134f979dbc4f070f87d4313098b704861a105fe34231c70a3901c"
 
 [[package]]
 name = "lz4-sys"
-version = "1.9.4"
+version = "1.11.1+lz4-1.10.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "57d27b317e207b10f69f5e75494119e391a96f48861ae870d1da6edac98ca900"
+checksum = "6bd8c0d6c6ed0cd30b3652886bb8711dc4bb01d637a68105a3d5158039b418e6"
 dependencies = [
  "cc",
  "libc",
@@ -2968,13 +2973,31 @@ dependencies = [
 ]
 
 [[package]]
-name = "rocksdb"
-version = "0.22.0"
+name = "rust-librocksdb-sys"
+version = "0.30.0+9.8.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6bd13e55d6d7b8cd0ea569161127567cd587676c99f4472f779a0279aa60a7a7"
+checksum = "a81bce962dd4113eae8a848ecb3598f25122cc6be675f815b71a4a2d0a523b85"
+dependencies = [
+ "bindgen",
+ "bzip2-sys",
+ "cc",
+ "glob",
+ "libc",
+ "libz-sys",
+ "lz4-sys",
+ "pkg-config",
+ "tikv-jemalloc-sys",
+ "zstd-sys",
+]
+
+[[package]]
+name = "rust-rocksdb"
+version = "0.34.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "16af4eac13d9b0025c84b4912cda7b5fa59f16c513a1b6ba65ae16cfb9ab10e3"
 dependencies = [
  "libc",
- "librocksdb-sys",
+ "rust-librocksdb-sys",
 ]
 
 [[package]]
@@ -3592,9 +3615,9 @@ dependencies = [
 
 [[package]]
 name = "tikv-jemalloc-sys"
-version = "0.5.4+5.3.0-patched"
+version = "0.6.0+5.3.0-1-ge13ca993e8ccb9ba9847cc330696e02839f328f7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9402443cb8fd499b6f327e40565234ff34dbda27460c5b47db0db77443dd85d1"
+checksum = "cd3c60906412afa9c2b5b5a48ca6a5abe5736aec9eb48ad05037a677e52e4e2d"
 dependencies = [
  "cc",
  "libc",
@@ -3602,9 +3625,9 @@ dependencies = [
 
 [[package]]
 name = "tikv-jemallocator"
-version = "0.5.4"
+version = "0.6.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "965fe0c26be5c56c94e38ba547249074803efd52adfb66de62107d95aab3eaca"
+checksum = "4cec5ff18518d81584f477e9bfdf957f5bb0979b0bac3af4ca30b5b3ae2d2865"
 dependencies = [
  "libc",
  "tikv-jemalloc-sys",
@@ -3612,9 +3635,9 @@ dependencies = [
 
 [[package]]
 name = "tikv-jemallocator-global"
-version = "0.5.0"
+version = "0.6.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c28047b535f87b21a79b0b450c5aed8235b32a5aaf8dcc6706b638c1eadea11f"
+checksum = "f51508a8b70f3a9778a8c2350d66e5fc1803b65893994db4ef633ae012d9f485"
 dependencies = [
  "cfg-if 0.1.10",
  "tikv-jemallocator",
@@ -4100,9 +4123,9 @@ checksum = "ac3b87c63620426dd9b991e5ce0329eff545bccbbb34f3be09ff6fb6ab51b7b6"
 
 [[package]]
 name = "winapi-util"
-version = "0.1.8"
+version = "0.1.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4d4cc384e1e73b93bafa6fb4f1df8c41695c8a91cf9c4c64358067d15a7b6c6b"
+checksum = "cf221c93e13a30d793f7645a0e7762c55d169dbb0a49671918a2319d289b10bb"
 dependencies = [
  "windows-sys 0.52.0",
 ]
