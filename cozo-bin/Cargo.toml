@@ -23,23 +23,23 @@ compact-single-threaded = ["minimal", "requests", "graph-algo"]
 ## Enables the `storage-sqlite` feature
 minimal = ["storage-sqlite"]
 ## Enables the [Sqlite](https://www.sqlite.org/index.html) backend, also allows backup and restore with Sqlite data files.
-storage-sqlite = ["cozo/storage-sqlite"]
+storage-sqlite = ["cozo-ce/storage-sqlite"]
 ## Enables the legacy [RocksDB](http://rocksdb.org/) backend
-storage-rocksdb = ["cozo/storage-rocksdb"]
+storage-rocksdb = ["cozo-ce/storage-rocksdb"]
 ## Enables the new [RocksDB](http://rocksdb.org/) backend
-storage-new-rocksdb = ["cozo/storage-new-rocksdb"]
+storage-new-rocksdb = ["cozo-ce/storage-new-rocksdb"]
 ## Enables the graph algorithms
-graph-algo = ["cozo/graph-algo"]
+graph-algo = ["cozo-ce/graph-algo"]
 ## Allows the utilities to make web requests to fetch data
-requests = ["cozo/requests"]
+requests = ["cozo-ce/requests"]
 ## Uses jemalloc as the global allocator, can make a difference in performance
-jemalloc = ["cozo/jemalloc"]
+jemalloc = ["cozo-ce/jemalloc"]
 ## Enables io-uring option for the RocksDB storage
-io-uring = ["cozo/io-uring"]
+io-uring = ["cozo-ce/io-uring"]
 ## Enables the [Sled](https://github.com/spacejam/sled) backend
-storage-sled = ["cozo/storage-sled"]
+storage-sled = ["cozo-ce/storage-sled"]
 ## Enables the [TiKV](https://tikv.org/) client backend
-storage-tikv = ["cozo/storage-tikv"]
+storage-tikv = ["cozo-ce/storage-tikv"]
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
