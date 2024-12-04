@@ -691,7 +691,7 @@ dependencies = [
  "casey",
  "chrono",
  "chrono-tz",
- "cozorocks",
+ "cozorocks-ce",
  "crossbeam",
  "csv",
  "document-features",
@@ -775,8 +775,8 @@ dependencies = [
 ]
 
 [[package]]
-name = "cozorocks"
-version = "0.1.7"
+name = "cozorocks-ce"
+version = "0.1.8"
 dependencies = [
  "cc",
  "cxx",
