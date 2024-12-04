@@ -1,6 +1,6 @@
 [package]
 name = "cozo-ce"
-version = "0.7.8"
+version = "0.7.9"
 edition = "2021"
 description = "A general-purpose, transactional, relational database that uses Datalog and focuses on graph data and algorithms"
 authors = ["Ziyang Hu"]
@@ -35,7 +35,7 @@ storage-sqlite-src = ["dep:sqlite3-src", "sqlite3-src/bundled"]
 storage-rocksdb = ["dep:cozorocks"]
 storage-new-rocksdb = ["dep:rocksdb"]
 ## Enables the graph algorithms.
-graph-algo = ["graph", "rayon"]
+graph-algo = ["graph", "rayon", "nalgebra"]
 ## Allows the utilities to make web requests to fetch data.
 requests = ["dep:minreq"]
 ## Uses jemalloc as the global allocator, can make a difference in performance.
@@ -141,6 +141,7 @@ aho-corasick = "1.1.3"
 rust-stemmers = "1.2.0"
 fast2s = "0.3.1"
 swapvec = "0.3.0"
+nalgebra = { version = "0.33.2", optional = true, features = ["rand"] }
 
 [dev-dependencies]
 tempfile = "3.14.0"
