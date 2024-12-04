@@ -6,7 +6,7 @@ license = "MPL-2.0"
 description = "Standalone Cozo database"
 authors = ["Ziyang Hu"]
 homepage = "https://www.cozodb.org"
-repository = "https://github.com/cozodb/cozo"
+repository = "https://github.com/cozo-community/cozo"
 documentation = "https://docs.cozodb.org"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
@@ -24,8 +24,10 @@ compact-single-threaded = ["minimal", "requests", "graph-algo"]
 minimal = ["storage-sqlite"]
 ## Enables the [Sqlite](https://www.sqlite.org/index.html) backend, also allows backup and restore with Sqlite data files.
 storage-sqlite = ["cozo/storage-sqlite"]
-## Enables the [RocksDB](http://rocksdb.org/) backend
+## Enables the legacy [RocksDB](http://rocksdb.org/) backend
 storage-rocksdb = ["cozo/storage-rocksdb"]
+## Enables the new [RocksDB](http://rocksdb.org/) backend
+storage-new-rocksdb = ["cozo/storage-new-rocksdb"]
 ## Enables the graph algorithms
 graph-algo = ["cozo/graph-algo"]
 ## Allows the utilities to make web requests to fetch data
@@ -42,7 +44,7 @@ storage-tikv = ["cozo/storage-tikv"]
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-cozo = { version = "0.7.6", path = "../cozo-core", default-features = false }
+cozo = { version = "0.7.7", path = "../cozo-core", default-features = false }
 clap = { version = "4.5.4", features = ["derive"] }
 env_logger = "0.11.3"
 log = "0.4.21"
