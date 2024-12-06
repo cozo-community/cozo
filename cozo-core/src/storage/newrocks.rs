@@ -5,7 +5,7 @@ use std::sync::Arc;
 use log::info;
 use miette::{miette, IntoDiagnostic, Result, WrapErr};
 
-use rust_rocksdb::{OptimisticTransactionDB, Options, WriteBatchWithTransaction, DB};
+use rust_rocksdb::{Cache, Env, OptimisticTransactionDB, Options, WriteBatchWithTransaction, DB};
 
 use crate::data::tuple::{check_key_for_validity, Tuple};
 use crate::data::value::ValidityTs;
@@ -29,7 +29,8 @@ pub fn new_cozo_newrocksdb(path: impl AsRef<Path>) -> Result<Db<NewRocksDbStorag
             err
         ))
     })?;
-    let path_buf = path.as_ref().to_path_buf();
+    let path_ref = path.as_ref();
+    let path_buf = path_ref.to_path_buf();
 
     let manifest_path = path_buf.join("manifest");
     let is_new = if manifest_path.exists() {
@@ -63,13 +64,37 @@ pub fn new_cozo_newrocksdb(path: impl AsRef<Path>) -> Result<Db<NewRocksDbStorag
     let store_path = path_buf.join("data");
     let store_path_str = store_path.to_str().ok_or(miette!("bad path name"))?;
 
-    let mut options = Options::default();
-    options.create_if_missing(is_new);
-    // Add any necessary RocksDB options here
-
-    let db = OptimisticTransactionDB::open(&options, store_path_str)
+    // Find the options file in the directory (arbitrary name in format OPTIONS-00xxx)
+    let options_file_exists = fs::read_dir(&path_buf)
         .into_diagnostic()
-        .wrap_err("Failed to open RocksDB")?;
+        .wrap_err("Failed to read directory")?
+        .filter_map(Result::ok)
+        .any(|entry| entry.file_name().to_string_lossy().starts_with("OPTIONS-"));
+
+    let (mut options, mut column_families) = if !options_file_exists {
+        (Options::default(), Vec::new())
+    } else {
+        println!("Loading options from {:?}", path_ref);
+        Options::load_latest(
+            &path_ref,
+            Env::new().unwrap(),
+            true,
+            Cache::new_lru_cache(1024 * 8),
+        )
+        .unwrap()
+    };
+
+    options.create_if_missing(is_new);
+
+    let db = if column_families.len() > 0 {
+        OptimisticTransactionDB::open_cf_descriptors(&options, store_path_str, column_families)
+            .into_diagnostic()
+            .wrap_err("Failed to open RocksDB")?
+    } else {
+        OptimisticTransactionDB::open(&options, store_path_str)
+            .into_diagnostic()
+            .wrap_err("Failed to open RocksDB")?
+    };
 
     let ret = Db::new(NewRocksDbStorage::new(db))?;
     ret.initialize()?;
@@ -331,11 +356,13 @@ impl<'s> StoreTx<'s> for NewRocksDbTx<'s> {
         's: 'a,
     {
         match self.db_tx {
-            Some(ref db_tx) => Box::new(db_tx.iterator(rust_rocksdb::IteratorMode::Start).map(|item| {
-                item.map(|(k, v)| (k.to_vec(), v.to_vec()))
-                    .into_diagnostic()
-                    .wrap_err_with(|| "Error during total scan")
-            })),
+            Some(ref db_tx) => Box::new(db_tx.iterator(rust_rocksdb::IteratorMode::Start).map(
+                |item| {
+                    item.map(|(k, v)| (k.to_vec(), v.to_vec()))
+                        .into_diagnostic()
+                        .wrap_err_with(|| "Error during total scan")
+                },
+            )),
             None => Box::new(std::iter::once(Err(miette!(
                 "Transaction already committed"
             )))),
@@ -344,7 +371,10 @@ impl<'s> StoreTx<'s> for NewRocksDbTx<'s> {
 }
 
 pub(crate) struct NewRocksDbIterator<'a> {
-    inner: rust_rocksdb::DBIteratorWithThreadMode<'a, rust_rocksdb::Transaction<'a, OptimisticTransactionDB>>,
+    inner: rust_rocksdb::DBIteratorWithThreadMode<
+        'a,
+        rust_rocksdb::Transaction<'a, OptimisticTransactionDB>,
+    >,
     upper_bound: Vec<u8>,
 }
 
@@ -368,7 +398,10 @@ impl<'a> Iterator for NewRocksDbIterator<'a> {
 }
 
 pub(crate) struct NewRocksDbSkipIterator<'a> {
-    inner: rust_rocksdb::DBIteratorWithThreadMode<'a, rust_rocksdb::Transaction<'a, OptimisticTransactionDB>>,
+    inner: rust_rocksdb::DBIteratorWithThreadMode<
+        'a,
+        rust_rocksdb::Transaction<'a, OptimisticTransactionDB>,
+    >,
     upper_bound: Vec<u8>,
     valid_at: ValidityTs,
     next_bound: Vec<u8>,
@@ -405,7 +438,10 @@ impl<'a> Iterator for NewRocksDbSkipIterator<'a> {
 }
 
 pub(crate) struct NewRocksDbIteratorRaw<'a> {
-    inner: rust_rocksdb::DBIteratorWithThreadMode<'a, rust_rocksdb::Transaction<'a, OptimisticTransactionDB>>,
+    inner: rust_rocksdb::DBIteratorWithThreadMode<
+        'a,
+        rust_rocksdb::Transaction<'a, OptimisticTransactionDB>,
+    >,
     upper_bound: Vec<u8>,
 }
 

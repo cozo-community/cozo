@@ -1,6 +1,6 @@
 [package]
 name = "cozo-ce"
-version = "0.7.10"
+version = "0.7.12"
 edition = "2021"
 description = "A general-purpose, transactional, relational database that uses Datalog and focuses on graph data and algorithms"
 authors = ["Ziyang Hu"]
@@ -32,16 +32,16 @@ storage-sqlite-src = ["dep:sqlite3-src", "sqlite3-src/bundled"]
 ## RocksDB is hard to compile on some platforms, uses more resources than SQLite,
 ## but is very performant and supports an extremely high level of concurrency.
 ## You can also [fine-tune](https://github.com/cozodb/cozo/blob/main/TUNING_ROCKSDB.md) RocksDB options.
-storage-rocksdb = ["dep:cozorocks-ce"]
+storage-rocksdb = [] # "dep:cozorocks-ce"]
 storage-new-rocksdb = ["dep:rust-rocksdb"]
 ## Enables the graph algorithms.
 graph-algo = ["graph", "rayon", "nalgebra"]
 ## Allows the utilities to make web requests to fetch data.
 requests = ["dep:minreq"]
 ## Uses jemalloc as the global allocator, can make a difference in performance.
-jemalloc = ["rust-rocksdb?/jemalloc", "cozorocks-ce?/jemalloc", "dep:tikv-jemallocator-global"]
+jemalloc = ["rust-rocksdb?/jemalloc", "dep:tikv-jemallocator-global"] # "cozorocks-ce?/jemalloc",
 ## Enables io-uring option for the RocksDB storage
-io-uring = ["rust-rocksdb?/io-uring", "cozorocks-ce?/io-uring"]
+io-uring = ["rust-rocksdb?/io-uring"] # , "cozorocks-ce?/io-uring"]
 ## Polyfills for the WASM target
 wasm = ["uuid/js", "dep:js-sys"]
 malloc-usable-size = ["rust-rocksdb?/malloc-usable-size"]
@@ -121,7 +121,7 @@ document-features = "0.2.8"
 rayon = { version = "1.10.0", optional = true }
 minreq = { version = "2.11.2", features = ["https-rustls"], optional = true }
 tikv-jemallocator-global = { version = "0.6.0", optional = true }
-cozorocks-ce = { path = "../cozorocks", version = "0.1.8", optional = true }
+# cozorocks-ce = { path = "../cozorocks", version = "0.1.8", optional = true }
 rust-rocksdb = { version = "0.34.0", optional = true }
 sled = { version = "0.34.7", optional = true }
 tikv-client = { version = "0.3.0", optional = true }

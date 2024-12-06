@@ -1,6 +1,6 @@
 [package]
 name = "cozo-ce-bin"
-version = "0.7.9"
+version = "0.7.12"
 edition = "2021"
 license = "MPL-2.0"
 description = "Standalone Cozo database"
@@ -40,11 +40,12 @@ io-uring = ["cozo-ce/io-uring"]
 storage-sled = ["cozo-ce/storage-sled"]
 ## Enables the [TiKV](https://tikv.org/) client backend
 storage-tikv = ["cozo-ce/storage-tikv"]
+malloc-usable-size = ["cozo-ce/malloc-usable-size"]
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-cozo-ce = { version = "0.7.9", path = "../cozo-core", default-features = true }
+cozo-ce = { version = "0.7.12", path = "../cozo-core", default-features = true }
 clap = { version = "4.5.4", features = ["derive"] }
 env_logger = "0.11.3"
 log = "0.4.21"
