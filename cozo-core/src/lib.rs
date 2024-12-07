@@ -59,7 +59,7 @@ pub use runtime::relation::decode_tuple_from_kv;
 pub use runtime::temp_store::RegularTempStore;
 pub use storage::mem::{new_cozo_mem, MemStorage};
 #[cfg(feature = "storage-new-rocksdb")]
-pub use storage::newrocks::{new_cozo_newrocksdb, NewRocksDbStorage};
+pub use storage::newrocks::{new_cozo_newrocksdb, NewRocksDbOpts, NewRocksDbStorage};
 #[cfg(feature = "storage-rocksdb")]
 pub use storage::rocks::{new_cozo_rocksdb, RocksDbStorage};
 #[cfg(feature = "storage-sled")]
@@ -157,7 +157,10 @@ impl DbInstance {
             #[cfg(feature = "storage-rocksdb")]
             "rocksdb" => Self::RocksDb(new_cozo_rocksdb(path)?),
             #[cfg(feature = "storage-new-rocksdb")]
-            "newrocksdb" => Self::NewRocksDb(new_cozo_newrocksdb(path)?),
+            "newrocksdb" => {
+                let opts: NewRocksDbOpts = serde_json::from_str(options).into_diagnostic()?;
+                Self::NewRocksDb(new_cozo_newrocksdb(path, opts)?)
+            }
             #[cfg(feature = "storage-sled")]
             "sled" => Self::Sled(new_cozo_sled(path)?),
             #[cfg(feature = "storage-tikv")]

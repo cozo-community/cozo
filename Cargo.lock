@@ -709,7 +709,7 @@ checksum = "773648b94d0e5d620f64f280777445740e61fe701025087ec8b57f45c791888b"
 
 [[package]]
 name = "cozo-ce"
-version = "0.7.12-alpha.1"
+version = "0.7.12"
 dependencies = [
  "aho-corasick",
  "approx",
@@ -772,7 +772,7 @@ dependencies = [
 
 [[package]]
 name = "cozo-ce-bin"
-version = "0.7.12-alpha.1"
+version = "0.7.12"
 dependencies = [
  "async-stream",
  "axum 0.7.9",

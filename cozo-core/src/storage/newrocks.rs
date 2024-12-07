@@ -5,7 +5,10 @@ use std::sync::Arc;
 use log::info;
 use miette::{miette, IntoDiagnostic, Result, WrapErr};
 
-use rust_rocksdb::{Cache, Env, OptimisticTransactionDB, Options, WriteBatchWithTransaction, DB};
+use rust_rocksdb::{
+    Cache, Env, LruCacheOptions, OptimisticTransactionDB, Options, WriteBatchWithTransaction,
+    WriteBufferManager, DB,
+};
 
 use crate::data::tuple::{check_key_for_validity, Tuple};
 use crate::data::value::ValidityTs;
@@ -17,11 +20,34 @@ use crate::Db;
 const KEY_PREFIX_LEN: usize = 9;
 const CURRENT_STORAGE_VERSION: u64 = 3;
 
+#[derive(serde_derive::Deserialize)]
+#[serde(default)]
+pub struct NewRocksDbOpts {
+    lru_cache_mb: Option<usize>,
+    write_buffer_mb: Option<usize>,
+    enable_write_buffer_manager: bool,
+    allow_stall: bool,
+}
+
+impl Default for NewRocksDbOpts {
+    fn default() -> Self {
+        Self {
+            lru_cache_mb: None,
+            write_buffer_mb: None,
+            enable_write_buffer_manager: false,
+            allow_stall: false,
+        }
+    }
+}
+
 /// Creates a RocksDB database object.
 /// This is currently the fastest persistent storage and it can
 /// sustain huge concurrency.
 /// Supports concurrent readers and writers.
-pub fn new_cozo_newrocksdb(path: impl AsRef<Path>) -> Result<Db<NewRocksDbStorage>> {
+pub fn new_cozo_newrocksdb(
+    path: impl AsRef<Path>,
+    opts: NewRocksDbOpts,
+) -> Result<Db<NewRocksDbStorage>> {
     fs::create_dir_all(&path).map_err(|err| {
         BadDbInit(format!(
             "cannot create directory {}: {}",
@@ -29,8 +55,15 @@ pub fn new_cozo_newrocksdb(path: impl AsRef<Path>) -> Result<Db<NewRocksDbStorag
             err
         ))
     })?;
+
     let path_ref = path.as_ref();
     let path_buf = path_ref.to_path_buf();
+
+    // extract option values
+    let lru_cache_mb = opts.lru_cache_mb.unwrap_or(64);
+    let write_buffer_mb = opts.write_buffer_mb.unwrap_or(128);
+    let enable_write_buffer_manager = opts.enable_write_buffer_manager;
+    let allow_stall = opts.allow_stall;
 
     let manifest_path = path_buf.join("manifest");
     let is_new = if manifest_path.exists() {
@@ -71,20 +104,24 @@ pub fn new_cozo_newrocksdb(path: impl AsRef<Path>) -> Result<Db<NewRocksDbStorag
         .filter_map(Result::ok)
         .any(|entry| entry.file_name().to_string_lossy().starts_with("OPTIONS-"));
 
-    let (mut options, mut column_families) = if !options_file_exists {
+    let (mut options, column_families) = if !options_file_exists {
         (Options::default(), Vec::new())
     } else {
         println!("Loading options from {:?}", path_ref);
-        Options::load_latest(
-            &path_ref,
-            Env::new().unwrap(),
-            true,
-            Cache::new_lru_cache(1024 * 8),
-        )
-        .unwrap()
+        let lru_cache = Cache::new_lru_cache(lru_cache_mb * 1024 * 1024);
+
+        Options::load_latest(&path_ref, Env::new().unwrap(), true, lru_cache).unwrap()
     };
 
     options.create_if_missing(is_new);
+
+    if enable_write_buffer_manager {
+        let wbm = WriteBufferManager::new_write_buffer_manager(
+            write_buffer_mb * 1024 * 1024,
+            allow_stall,
+        );
+        options.set_write_buffer_manager(&wbm);
+    }
 
     let db = if column_families.len() > 0 {
         OptimisticTransactionDB::open_cf_descriptors(&options, store_path_str, column_families)
