@@ -10,7 +10,7 @@
 
 extern crate test;
 
-use cozo::{DataValue, DbInstance, NamedRows, Validity};
+use cozo_ce::{DataValue, DbInstance, NamedRows, Validity};
 use itertools::Itertools;
 use lazy_static::{initialize, lazy_static};
 use rand::Rng;

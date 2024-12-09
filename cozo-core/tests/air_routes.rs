@@ -16,7 +16,7 @@ use env_logger::Env;
 use lazy_static::{initialize, lazy_static};
 use serde_json::json;
 
-use cozo::DbInstance;
+use cozo_ce::DbInstance;
 
 lazy_static! {
     static ref TEST_DB: DbInstance = {

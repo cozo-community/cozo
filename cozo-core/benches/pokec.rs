@@ -22,7 +22,7 @@ use rand::Rng;
 use rayon::prelude::*;
 use regex::Regex;
 
-use cozo::{DataValue, DbInstance, NamedRows};
+use cozo_ce::{DataValue, DbInstance, NamedRows};
 
 lazy_static! {
     static ref ITERATIONS: usize = {

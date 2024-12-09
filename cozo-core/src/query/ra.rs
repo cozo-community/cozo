@@ -9,6 +9,7 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::{Debug, Formatter, Write};
 use std::iter;
+use std::sync::Arc;
 
 use either::{Left, Right};
 use itertools::Itertools;
@@ -21,14 +22,20 @@ use crate::data::expr::{compute_bounds, eval_bytecode, eval_bytecode_pred, Bytec
 use crate::data::program::{FtsSearch, HnswSearch, MagicSymbol};
 use crate::data::relation::{ColType, NullableColType};
 use crate::data::symb::Symbol;
-use crate::data::tuple::{Tuple, TupleIter};
+use crate::data::tuple::{Tuple, TupleIter, TupleT};
 use crate::data::value::{DataValue, ValidityTs};
 use crate::parse::SourceSpan;
 use crate::runtime::minhash_lsh::LshSearch;
 use crate::runtime::relation::RelationHandle;
+use crate::runtime::relation::RelationId;
 use crate::runtime::temp_store::EpochStore;
 use crate::runtime::transact::SessionTx;
+use crate::storage::StoreTx;
 use crate::utils::swap_option_result;
+
+
+#[cfg(feature = "storage-new-rocksdb")]
+use rust_rocksdb::Range;
 
 pub(crate) enum RelAlgebra {
     Fixed(InlineFixedRA),
@@ -60,6 +67,56 @@ impl RelAlgebra {
             RelAlgebra::HnswSearch(i) => i.hnsw_search.span,
             RelAlgebra::FtsSearch(i) => i.fts_search.span,
             RelAlgebra::LshSearch(i) => i.lsh_search.span,
+        }
+    }
+
+    #[cfg(feature = "storage-new-rocksdb")]
+    fn estimate_size(&self, tx: &SessionTx<'_>) -> Result<usize> {
+        match self {
+            RelAlgebra::Fixed(f) => Ok(f.data.len()),
+            
+            RelAlgebra::TempStore(r) => Ok(0),
+            
+            RelAlgebra::Stored(r) => {
+                let lower = vec![].encode_as_key(r.storage.id);
+                let upper = vec![].encode_as_key(r.storage.id.next());
+                let range = Range {
+                    start: &lower[..],
+                    end: &upper[..],
+                };
+                tx.store_tx.approximate_count(&range)
+            }
+            
+            RelAlgebra::StoredWithValidity(r) => {
+                let lower = vec![].encode_as_key(r.storage.id);
+                let upper = vec![].encode_as_key(r.storage.id.next());
+                let range = Range {
+                    start: &lower[..],
+                    end: &upper[..],
+                };
+                tx.store_tx.approximate_count(&range)
+            }
+            
+            RelAlgebra::Join(j) => {
+                // For joins, estimate based on the smaller relation
+                let left_size = j.left.estimate_size(tx)?;
+                let right_size = j.right.estimate_size(tx)?;
+                Ok(std::cmp::min(left_size, right_size))
+            }
+            
+            RelAlgebra::NegJoin(j) => j.left.estimate_size(tx),
+            
+            RelAlgebra::Reorder(r) => r.relation.estimate_size(tx),
+            
+            RelAlgebra::Filter(f) => f.parent.estimate_size(tx),
+            
+            RelAlgebra::Unification(u) => u.parent.estimate_size(tx),
+            
+            RelAlgebra::HnswSearch(s) => s.parent.estimate_size(tx),
+            
+            RelAlgebra::FtsSearch(s) => s.parent.estimate_size(tx),
+            
+            RelAlgebra::LshSearch(s) => s.parent.estimate_size(tx),
         }
     }
 }
@@ -1753,16 +1810,16 @@ impl TempStoreRA {
                                     return Ok(None);
                                 }
                             }
-                            let mut ret = tuple.clone();
-                            ret.extend(found);
-                            Ok(Some(ret))
-                        }
+                                    let mut ret = tuple.clone();
+                                    ret.extend(found);
+                                    Ok(Some(ret))
+                                }
+                            })
+                            .filter_map(swap_option_result),
+                        )
                     })
-                    .filter_map(swap_option_result),
-                )
-            })
-            .flatten_ok()
-            .map(flatten_err);
+                    .flatten_ok()
+                    .map(flatten_err);
         Ok(if eliminate_indices.is_empty() {
             Box::new(it)
         } else {
@@ -2221,6 +2278,7 @@ impl InnerJoin {
             }
         }
     }
+
     fn materialized_join<'a>(
         &'a self,
         tx: &'a SessionTx<'_>,
@@ -2228,150 +2286,198 @@ impl InnerJoin {
         delta_rule: Option<&MagicSymbol>,
         stores: &'a BTreeMap<MagicSymbol, EpochStore>,
     ) -> Result<TupleIter<'a>> {
-        debug!("using materialized join");
         let right_bindings = self.right.bindings_after_eliminate();
         let (left_join_indices, right_join_indices) = self
             .joiner
-            .join_indices(&self.left.bindings_after_eliminate(), &right_bindings)
-            .unwrap();
+            .join_indices(&self.left.bindings_after_eliminate(), &right_bindings)?;
 
-        let mut left_iter = self.left.iter(tx, delta_rule, stores)?;
-        let left_cache = match left_iter.next() {
-            None => return Ok(Box::new(iter::empty())),
-            Some(Err(err)) => return Err(err),
-            Some(Ok(data)) => data,
-        };
+        // Get size estimates for both relations
+        let left_size = self.left.estimate_size(tx)?;
+        let right_size = self.right.estimate_size(tx)?;
 
-        let right_join_indices_set = BTreeSet::from_iter(right_join_indices.iter().cloned());
-        let mut right_store_indices = right_join_indices;
-        for i in 0..right_bindings.len() {
-            if !right_join_indices_set.contains(&i) {
-                right_store_indices.push(i)
-            }
+        // If right relation is larger, flip the relations
+        if right_size > left_size {
+            return self.materialized_join_impl(
+                tx,
+                eliminate_indices,
+                delta_rule,
+                stores,
+                &self.right,
+                &self.left,
+                right_join_indices,
+                left_join_indices,
+                true,
+            );
         }
 
-        let right_invert_indices = right_store_indices
-            .iter()
-            .enumerate()
-            .sorted_by_key(|(_, b)| **b)
-            .map(|(a, _)| a)
-            .collect_vec();
-        let cached_data = {
-            let mut cache = BTreeSet::new();
-            for item in self.right.iter(tx, delta_rule, stores)? {
-                match item {
-                    Ok(tuple) => {
-                        let stored_tuple = right_store_indices
-                            .iter()
-                            .map(|i| tuple[*i].clone())
-                            .collect_vec();
-                        cache.insert(stored_tuple);
-                    }
-                    Err(e) => return Err(e),
-                }
-            }
-            cache.into_iter().collect_vec()
-        };
-
-        let (prefix, right_idx) =
-            build_mat_range_iter(&cached_data, &left_join_indices, &left_cache);
-
-        let it = CachedMaterializedIterator {
+        // Otherwise proceed with original right-side materialization
+        self.materialized_join_impl(
+            tx,
             eliminate_indices,
-            left: left_iter,
-            left_cache,
+            delta_rule,
+            stores,
+            &self.left,
+            &self.right,
             left_join_indices,
-            materialized: cached_data,
-            right_invert_indices,
-            right_idx,
-            prefix,
-        };
-        Ok(Box::new(it))
+            right_join_indices,
+            false,
+        )
+    }
+
+    fn materialized_join_impl<'a>(
+        &'a self,
+        tx: &'a SessionTx<'_>,
+        eliminate_indices: BTreeSet<usize>,
+        delta_rule: Option<&MagicSymbol>,
+        stores: &'a BTreeMap<MagicSymbol, EpochStore>,
+        probe_rel: &'a RelAlgebra,
+        build_rel: &'a RelAlgebra,
+        probe_join_indices: Vec<usize>,
+        build_join_indices: Vec<usize>,
+        flipped: bool,
+    ) -> Result<TupleIter<'a>> {
+        let build_bindings = build_rel.bindings_after_eliminate();
+        let build_join_indices_set: BTreeSet<_> = build_join_indices.iter().cloned().collect();
+        let mut build_store_indices = build_join_indices.clone();
+
+        for i in 0..build_bindings.len() {
+            if !build_join_indices_set.contains(&i) {
+                build_store_indices.push(i);
+            }
+        }
+
+        // Prepare mapping from build tuple positions to positions in build_store_indices
+        let mut indexed_positions: Vec<_> = build_store_indices.iter().enumerate().collect();
+        indexed_positions.sort_by_key(|(_, idx)| *idx);
+        let build_invert_indices: Vec<usize> =
+            indexed_positions.into_iter().map(|(pos, _)| pos).collect();
+
+        // Pre-allocate with estimated capacity
+        let mut build_tuples_map: BTreeMap<Vec<DataValue>, Vec<Vec<DataValue>>> = BTreeMap::new();
+
+        // Process build side tuples in chunks to avoid memory spikes
+        const CHUNK_SIZE: usize = 1000;
+        let mut current_chunk = Vec::with_capacity(CHUNK_SIZE);
+
+        for item in build_rel.iter(tx, delta_rule, stores)? {
+            let tuple = item?;
+            let key: Vec<_> = build_join_indices
+                .iter()
+                .map(|i| tuple[*i].clone())
+                .collect();
+            let value: Vec<_> = build_store_indices
+                .iter()
+                .map(|i| tuple[*i].clone())
+                .collect();
+
+            current_chunk.push((key, value));
+
+            if current_chunk.len() >= CHUNK_SIZE {
+                // Process chunk
+                for (k, v) in current_chunk.drain(..) {
+                    build_tuples_map.entry(k).or_default().push(v);
+                }
+            }
+        }
+
+        // Process remaining items
+        for (k, v) in current_chunk {
+            build_tuples_map.entry(k).or_default().push(v);
+        }
+
+        let probe_iter = probe_rel.iter(tx, delta_rule, stores)?;
+        let eliminate_indices = Arc::new(eliminate_indices);
+        let build_invert_indices = Arc::new(build_invert_indices);
+        let build_tuples_map = Arc::new(build_tuples_map);
+
+        Ok(Box::new(JoinedIter {
+            left_iter: probe_iter,
+            left_join_indices: probe_join_indices,
+            right_tuples_map: build_tuples_map,
+            eliminate_indices,
+            right_invert_indices: build_invert_indices,
+            current_matches: None,
+            current_match_index: 0,
+            flipped,
+        }))
     }
 }
 
-struct CachedMaterializedIterator<'a> {
-    materialized: Vec<Tuple>,
-    eliminate_indices: BTreeSet<usize>,
+// Add this struct to handle the join iteration
+struct JoinedIter<I> {
+    left_iter: I,
     left_join_indices: Vec<usize>,
-    right_invert_indices: Vec<usize>,
-    right_idx: usize,
-    prefix: Tuple,
-    left: TupleIter<'a>,
-    left_cache: Tuple,
+    right_tuples_map: Arc<BTreeMap<Vec<DataValue>, Vec<Vec<DataValue>>>>,
+    eliminate_indices: Arc<BTreeSet<usize>>,
+    right_invert_indices: Arc<Vec<usize>>,
+    current_matches: Option<(Tuple, &'static [Vec<DataValue>])>, // Changed to use reference
+    current_match_index: usize,
+    flipped: bool,
 }
 
-impl<'a> CachedMaterializedIterator<'a> {
-    fn advance_right(&mut self) -> Option<&Tuple> {
-        if self.right_idx == self.materialized.len() {
-            None
-        } else {
-            let ret = &self.materialized[self.right_idx];
-            if ret.starts_with(&self.prefix) {
-                self.right_idx += 1;
-                Some(ret)
-            } else {
-                None
-            }
-        }
-    }
-    fn next_inner(&mut self) -> Result<Option<Tuple>> {
-        loop {
-            let right_nxt = self.advance_right();
-            match right_nxt {
-                Some(data) => {
-                    let data = data.clone();
-                    let mut ret = self.left_cache.clone();
-                    for i in &self.right_invert_indices {
-                        ret.push(data[*i].clone());
-                    }
-                    let tuple = eliminate_from_tuple(ret, &self.eliminate_indices);
-                    return Ok(Some(tuple));
-                }
-                None => {
-                    let next_left = self.left.next();
-                    match next_left {
-                        None => return Ok(None),
-                        Some(l) => {
-                            let left_tuple = l?;
-                            let (prefix, idx) = build_mat_range_iter(
-                                &self.materialized,
-                                &self.left_join_indices,
-                                &left_tuple,
-                            );
-                            self.left_cache = left_tuple;
-
-                            self.right_idx = idx;
-                            self.prefix = prefix;
-                        }
-                    }
-                }
-            }
-        }
-    }
-}
-
-fn build_mat_range_iter(
-    mat: &[Tuple],
-    left_join_indices: &[usize],
-    left_tuple: &Tuple,
-) -> (Tuple, usize) {
-    let prefix = left_join_indices
-        .iter()
-        .map(|i| left_tuple[*i].clone())
-        .collect_vec();
-    let idx = match mat.binary_search(&prefix) {
-        Ok(i) => i,
-        Err(i) => i,
-    };
-    (prefix, idx)
-}
-
-impl<'a> Iterator for CachedMaterializedIterator<'a> {
+impl<I> Iterator for JoinedIter<I>
+where
+    I: Iterator<Item = Result<Tuple>>,
+{
     type Item = Result<Tuple>;
 
-    fn next(&mut self) -> Option<Self::Item> {
-        swap_option_result(self.next_inner())
+    fn next(&mut self)  -> Option<Self::Item> {
+        loop {
+            // Process current matches if any
+            if let Some((left_tuple, matches)) = &self.current_matches {
+                if self.current_match_index < matches.len() {
+                    let right_values = &matches[self.current_match_index];
+                    self.current_match_index += 1;
+
+                    let mut result = if !self.flipped {
+                        // Pre-allocate with exact capacity
+                        let mut result =
+                            Vec::with_capacity(left_tuple.len() + self.right_invert_indices.len());
+                        result.extend_from_slice(left_tuple);
+                        for i in &*self.right_invert_indices {
+                            result.push(right_values[*i].clone());
+                        }
+                        result
+                    } else {
+                        let mut result = Vec::with_capacity(left_tuple.len() + right_values.len());
+                        for i in &*self.right_invert_indices {
+                            result.push(right_values[*i].clone());
+                        }
+                        result.extend_from_slice(left_tuple);
+                        result
+                    };
+
+                    // Avoid allocating new vector for eliminate indices when possible
+                    if !self.eliminate_indices.is_empty() {
+                        result = eliminate_from_tuple(result, &*self.eliminate_indices);
+                    }
+                    return Some(Ok(result));
+                }
+                self.current_matches = None;
+            }
+
+            // Get next left tuple
+            match self.left_iter.next() {
+                None => return None,
+                Some(Err(e)) => return Some(Err(e)),
+                Some(Ok(left_tuple)) => {
+                    let left_key: Vec<_> = self
+                        .left_join_indices
+                        .iter()
+                        .map(|&i| left_tuple[i].clone())
+                        .collect();
+
+                    if let Some(matches) = self.right_tuples_map.get(&left_key) {
+                        // Use reference instead of cloning
+                        self.current_matches = Some((left_tuple, unsafe {
+                            std::mem::transmute(matches.as_slice())
+                        }));
+                        self.current_match_index = 0;
+                        continue;
+                    }
+                }
+            }
+        }
     }
 }
 

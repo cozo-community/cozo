@@ -8,6 +8,7 @@
  */
 
 use uuid::Uuid;
+use uuid_simd::UuidExt;
 
 use crate::data::memcmp::{decode_bytes, MemCmpEncoder};
 use crate::data::value::{DataValue, Num, UuidWrapper};

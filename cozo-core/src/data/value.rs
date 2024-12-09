@@ -26,6 +26,7 @@ use sha2::digest::FixedOutput;
 use sha2::{Digest, Sha256};
 use smartstring::{LazyCompact, SmartString};
 use uuid::Uuid;
+use uuid_simd::UuidExt;
 
 /// UUID value in the database
 #[derive(Clone, Hash, Eq, PartialEq, serde_derive::Deserialize, serde_derive::Serialize)]

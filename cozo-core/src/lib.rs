@@ -15,7 +15,7 @@
 //!
 //! Rust API usage:
 //! ```
-//! use cozo::*;
+//! use cozo_ce::*;
 //!
 //! let db = DbInstance::new("mem", "", Default::default()).unwrap();
 //! let script = "?[a] := a in [1, 2, 3]";
@@ -27,7 +27,7 @@
 //!
 #![doc = document_features::document_features!()]
 #![warn(rust_2018_idioms, future_incompatible)]
-#![warn(missing_docs)]
+// #![warn(missing_docs)]
 #![allow(clippy::type_complexity)]
 #![allow(clippy::too_many_arguments)]
 

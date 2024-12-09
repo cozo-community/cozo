@@ -6,7 +6,7 @@ use log::info;
 use miette::{miette, IntoDiagnostic, Result, WrapErr};
 
 use rust_rocksdb::{
-    Cache, Env, LruCacheOptions, OptimisticTransactionDB, Options, WriteBatchWithTransaction,
+    Cache, Env, LruCacheOptions, OptimisticTransactionDB, Options, Range, WriteBatchWithTransaction,
     WriteBufferManager, DB,
 };
 
@@ -159,6 +159,7 @@ impl<'s> Storage<'s> for NewRocksDbStorage {
 
     fn transact(&'s self, _write: bool) -> Result<Self::Tx> {
         Ok(NewRocksDbTx {
+            db: self.db.clone(),
             db_tx: Some(self.db.transaction()),
         })
     }
@@ -185,6 +186,7 @@ impl<'s> Storage<'s> for NewRocksDbStorage {
 }
 
 pub struct NewRocksDbTx<'a> {
+    db: Arc<OptimisticTransactionDB>,
     db_tx: Option<rust_rocksdb::Transaction<'a, OptimisticTransactionDB>>,
 }
 
@@ -405,6 +407,31 @@ impl<'s> StoreTx<'s> for NewRocksDbTx<'s> {
             )))),
         }
     }
+
+    #[cfg(feature = "storage-new-rocksdb")]
+    fn approximate_count(&self, range: &Range<&[u8]>) -> Result<usize> {
+        // Create a new Range<Vec<u8>> from the input range
+        let range = rust_rocksdb::Range {
+            start: range.start.to_vec(),
+            end: range.end.to_vec(),
+        };
+        let ranges = vec![range];
+        
+        let sizes = self.db.approximate_sizes(&ranges)
+            .into_diagnostic()
+            .wrap_err("Failed to get approximate sizes")?;
+
+        let size_in_bytes = sizes.get(0)
+            .ok_or(miette!("Failed to get approximate size"))?;
+
+        // Estimate the average size per key-value pair (you may need to adjust this)
+        let average_entry_size = 100; // Example value in bytes
+
+        // Calculate approximate count
+        let approximate_count = (size_in_bytes / average_entry_size as u64) as usize;
+
+        Ok(approximate_count)
+    }
 }
 
 pub(crate) struct NewRocksDbIterator<'a> {
@@ -509,7 +536,7 @@ mod tests {
 
     fn setup_test_db() -> Result<(TempDir, Db<NewRocksDbStorage>)> {
         let temp_dir = TempDir::new().into_diagnostic()?;
-        let db = new_cozo_newrocksdb(temp_dir.path())?;
+        let db = new_cozo_newrocksdb(temp_dir.path(), NewRocksDbOpts::default())?;
 
         // Create test tables with proper ScriptMutability parameter
         db.run_script(

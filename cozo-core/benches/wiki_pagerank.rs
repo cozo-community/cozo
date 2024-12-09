@@ -20,7 +20,7 @@ use test::Bencher;
 
 use lazy_static::{initialize, lazy_static};
 
-use cozo::{DataValue, DbInstance, NamedRows};
+use cozo_ce::{DataValue, DbInstance, NamedRows};
 
 lazy_static! {
     static ref TEST_DB: DbInstance = {

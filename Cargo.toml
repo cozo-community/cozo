@@ -19,3 +19,9 @@ debug = true
 
 [profile.dev.package."cozorocks"]
 opt-level = 3
+
+[profile.release]
+strip = "debuginfo"
+opt-level = 3
+lto = "fat"
+codegen-units = 1
