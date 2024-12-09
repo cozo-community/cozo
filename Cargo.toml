@@ -2,15 +2,15 @@
 resolver = "2"
 members = [
     "cozo-core",
-    "cozorocks",
     "cozo-bin",
-    "cozo-lib-c",
-    "cozo-lib-java",
-    "cozo-lib-wasm",
-    "cozo-lib-swift",
-    "cozo-lib-python",
-    "cozo-lib-nodejs",
-    "cozo-core-examples",
+    # "cozorocks",
+    # "cozo-lib-c",
+    # "cozo-lib-java",
+    # "cozo-lib-wasm",
+    # "cozo-lib-swift",
+    # "cozo-lib-python",
+    # "cozo-lib-nodejs",
+    # "cozo-core-examples",
 ]
 
 [profile.bench]
@@ -19,3 +19,9 @@ debug = true
 
 [profile.dev.package."cozorocks"]
 opt-level = 3
+
+[profile.release]
+strip = "debuginfo"
+opt-level = 3
+lto = "fat"
+codegen-units = 1

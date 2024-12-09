@@ -8,11 +8,11 @@
 
 pub(crate) mod callback;
 pub(crate) mod db;
+pub(crate) mod hnsw;
 pub(crate) mod imperative;
+pub(crate) mod minhash_lsh;
 pub(crate) mod relation;
 pub(crate) mod temp_store;
-pub(crate) mod transact;
-pub(crate) mod hnsw;
-pub(crate) mod minhash_lsh;
 #[cfg(test)]
 mod tests;
+pub(crate) mod transact;

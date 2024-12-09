@@ -10,8 +10,8 @@ use std::collections::BTreeMap;
 use std::convert::Infallible;
 use std::net::{Ipv6Addr, SocketAddr};
 use std::str::FromStr;
-use std::sync::{Arc, Mutex};
 use std::sync::atomic::{AtomicU32, Ordering};
+use std::sync::{Arc, Mutex};
 
 use axum::body::Body;
 use axum::extract::{DefaultBodyLimit, Path, Query, State};
@@ -35,7 +35,10 @@ use tower_http::auth::{AsyncAuthorizeRequest, AsyncRequireAuthorizationLayer};
 use tower_http::compression::CompressionLayer;
 use tower_http::cors::{Any, CorsLayer};
 
-use cozo::{DataValue, DbInstance, format_error_as_json, MultiTransaction, NamedRows, ScriptMutability, SimpleFixedRule};
+use cozo_ce::{
+    format_error_as_json, DataValue, DbInstance, MultiTransaction, NamedRows, ScriptMutability,
+    SimpleFixedRule,
+};
 
 #[derive(Args, Debug)]
 pub(crate) struct ServerArgs {
@@ -84,8 +87,7 @@ struct MyAuth {
     token_table: Option<Arc<(String, DbInstance)>>,
 }
 
-impl AsyncAuthorizeRequest<Body> for MyAuth
-{
+impl AsyncAuthorizeRequest<Body> for MyAuth {
     type RequestBody = Body;
     type ResponseBody = Body;
     type Future = BoxFuture<'static, Result<Request<Body>, Response<Self::ResponseBody>>>;
@@ -279,7 +281,9 @@ pub(crate) async fn server_main(args: ServerArgs) {
     );
 
     let listener = TcpListener::bind(&addr).await.unwrap();
-    axum::serve(listener, app.into_make_service()).await.unwrap();
+    axum::serve(listener, app.into_make_service())
+        .await
+        .unwrap();
 }
 
 #[derive(serde_derive::Deserialize)]
@@ -316,7 +320,7 @@ async fn transact_query(
         let query = payload.script;
         tx.run_script(&query, params)
     })
-        .await;
+    .await;
     match result {
         Ok(Ok(res)) => (StatusCode::OK, res.into_json().into()),
         Ok(Err(err)) => (
@@ -387,7 +391,7 @@ async fn text_query(
             },
         )
     })
-        .await;
+    .await;
     match result {
         Ok(res) => wrap_json(res),
         Err(err) => internal_error(err),
@@ -569,7 +573,7 @@ async fn register_rule(
     State(st): State<DbState>,
     Path(name): Path<String>,
     Query(rule_opts): Query<RuleRegisterOptions>,
-) -> Sse<impl Stream<Item=Result<Event, Infallible>>> {
+) -> Sse<impl Stream<Item = Result<Event, Infallible>>> {
     let (rule, task_receiver) = SimpleFixedRule::rule_with_channel(rule_opts.arity);
     let (down_sender, mut down_receiver) = tokio::sync::mpsc::channel(1);
     let mut errored = None;
@@ -629,7 +633,7 @@ async fn register_rule(
 async fn observe_changes(
     State(st): State<DbState>,
     Path(relation): Path<String>,
-) -> Sse<impl Stream<Item=Result<Event, Infallible>>> {
+) -> Sse<impl Stream<Item = Result<Event, Infallible>>> {
     let (id, recv) = st.db.register_callback(&relation, None);
     let (sender, mut receiver) = tokio::sync::mpsc::channel(1);
     struct Guard {
@@ -666,8 +670,8 @@ async fn root() -> Html<&'static str> {
 }
 
 fn internal_error<E>(err: E) -> (StatusCode, Json<serde_json::Value>)
-    where
-        E: std::error::Error,
+where
+    E: std::error::Error,
 {
     (
         StatusCode::INTERNAL_SERVER_ERROR,

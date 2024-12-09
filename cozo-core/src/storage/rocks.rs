@@ -12,7 +12,7 @@ use std::path::{Path, PathBuf};
 use log::info;
 use miette::{miette, IntoDiagnostic, Result, WrapErr};
 
-use cozorocks::{DbBuilder, DbIter, RocksDb, Tx};
+use cozorocks_ce::{DbBuilder, DbIter, RocksDb, Tx};
 
 use crate::data::tuple::{check_key_for_validity, Tuple};
 use crate::data::value::ValidityTs;

@@ -1,5 +1,5 @@
 [package]
-name = "cozo_c"
+name = "cozo_c-ce"
 version = "0.7.6"
 edition = "2021"
 license = "MPL-2.0"
@@ -23,22 +23,22 @@ compact-single-threaded = ["minimal", "requests", "graph-algo"]
 ## Enables the `storage-sqlite` feature
 minimal = ["storage-sqlite"]
 ## Enables the [Sqlite](https://www.sqlite.org/index.html) backend, also allows backup and restore with Sqlite data files.
-storage-sqlite = ["cozo/storage-sqlite"]
+storage-sqlite = ["cozo-ce/storage-sqlite"]
 ## Enables the [RocksDB](http://rocksdb.org/) backend
-storage-rocksdb = ["cozo/storage-rocksdb"]
+storage-rocksdb = ["cozo-ce/storage-rocksdb"]
 ## Enables the graph algorithms
-graph-algo = ["cozo/graph-algo"]
+graph-algo = ["cozo-ce/graph-algo"]
 ## Allows the utilities to make web requests to fetch data
-requests = ["cozo/requests"]
+requests = ["cozo-ce/requests"]
 ## Uses jemalloc as the global allocator, can make a difference in performance
-jemalloc = ["cozo/jemalloc"]
+jemalloc = ["cozo-ce/jemalloc"]
 ## Enables io-uring option for the RocksDB storage
-io-uring = ["cozo/io-uring"]
+io-uring = ["cozo-ce/io-uring"]
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-cozo = { version = "0.7.6", path = "../cozo-core", default_features = false }
+cozo-ce = { version = "0.7.7", path = "../cozo-core", default_features = false }
 lazy_static = "1.4.0"
 
 [build-dependencies]
