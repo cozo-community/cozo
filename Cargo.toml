@@ -2,8 +2,8 @@
 resolver = "2"
 members = [
     "cozo-core",
-    "cozorocks",
     "cozo-bin",
+    # "cozorocks",
     # "cozo-lib-c",
     # "cozo-lib-java",
     # "cozo-lib-wasm",
