@@ -8,6 +8,7 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::{Debug, Formatter};
+use std::sync::Arc;
 
 use miette::{bail, ensure, miette, Result};
 use rand::prelude::*;
@@ -154,17 +155,17 @@ define_aggr!(AGGR_UNIQUE, false);
 
 #[derive(Default)]
 pub(crate) struct AggrUnique {
-    accum: BTreeSet<DataValue>,
+    accum: BTreeSet<Arc<DataValue>>,
 }
 
 impl NormalAggrObj for AggrUnique {
     fn set(&mut self, value: &DataValue) -> Result<()> {
-        self.accum.insert(value.clone());
+        self.accum.insert(Arc::new(value.clone()));
         Ok(())
     }
 
     fn get(&self) -> Result<DataValue> {
-        Ok(DataValue::List(self.accum.iter().cloned().collect()))
+        Ok(DataValue::List(self.accum.iter().map(|x| (**x).clone()).collect()))
     }
 }
 
@@ -172,12 +173,12 @@ define_aggr!(AGGR_GROUP_COUNT, false);
 
 #[derive(Default)]
 pub(crate) struct AggrGroupCount {
-    accum: BTreeMap<DataValue, i64>,
+    accum: BTreeMap<Arc<DataValue>, i64>,
 }
 
 impl NormalAggrObj for AggrGroupCount {
     fn set(&mut self, value: &DataValue) -> Result<()> {
-        let entry = self.accum.entry(value.clone()).or_default();
+        let entry = self.accum.entry(Arc::new(value.clone())).or_default();
         *entry += 1;
         Ok(())
     }
@@ -186,7 +187,7 @@ impl NormalAggrObj for AggrGroupCount {
         Ok(DataValue::List(
             self.accum
                 .iter()
-                .map(|(k, v)| DataValue::List(vec![k.clone(), DataValue::from(*v)]))
+                .map(|(k, v)| DataValue::List(vec![(**k).clone(), DataValue::from(*v)]))
                 .collect(),
         ))
     }
@@ -197,13 +198,13 @@ define_aggr!(AGGR_COUNT_UNIQUE, false);
 #[derive(Default)]
 pub(crate) struct AggrCountUnique {
     count: i64,
-    accum: BTreeSet<DataValue>,
+    accum: BTreeSet<Arc<DataValue>>,
 }
 
 impl NormalAggrObj for AggrCountUnique {
     fn set(&mut self, value: &DataValue) -> Result<()> {
         if !self.accum.contains(value) {
-            self.accum.insert(value.clone());
+            self.accum.insert(Arc::new(value.clone()));
             self.count += 1;
         }
         Ok(())
@@ -218,20 +219,20 @@ define_aggr!(AGGR_UNION, true);
 
 #[derive(Default)]
 pub(crate) struct AggrUnion {
-    accum: BTreeSet<DataValue>,
+    accum: BTreeSet<Arc<DataValue>>,
 }
 
 impl NormalAggrObj for AggrUnion {
     fn set(&mut self, value: &DataValue) -> Result<()> {
         match value {
-            DataValue::List(v) => self.accum.extend(v.iter().cloned()),
+            DataValue::List(v) => self.accum.extend(v.iter().map(|x| Arc::new(x.clone()))),
             v => bail!("cannot compute 'union' for value {:?}", v),
         }
         Ok(())
     }
 
     fn get(&self) -> Result<DataValue> {
-        Ok(DataValue::List(self.accum.iter().cloned().collect()))
+        Ok(DataValue::List(self.accum.iter().map(|x| (**x).clone()).collect()))
     }
 }
 
@@ -360,10 +361,12 @@ pub(crate) struct AggrCollect {
     accum: Vec<DataValue>,
 }
 
+const DEFAULT_LIMIT: usize = 1000000;
+
 impl AggrCollect {
-    fn new(limit: usize) -> Self {
+    fn new(limit: Option<usize>) -> Self {
         Self {
-            limit: Some(limit),
+            limit: limit.or(Some(DEFAULT_LIMIT)),
             accum: vec![],
         }
     }
@@ -371,10 +374,8 @@ impl AggrCollect {
 
 impl NormalAggrObj for AggrCollect {
     fn set(&mut self, value: &DataValue) -> Result<()> {
-        if let Some(limit) = self.limit {
-            if self.accum.len() >= limit {
-                return Ok(());
-            }
+        if self.accum.len() >= self.limit.unwrap_or(DEFAULT_LIMIT) {
+            return Ok(());
         }
         self.accum.push(value.clone());
         Ok(())
@@ -1246,7 +1247,7 @@ impl Aggregation {
                         "argument to 'collect' must be positive, got {}",
                         arg
                     );
-                    AggrCollect::new(arg as usize)
+                    AggrCollect::new(Some(arg as usize))
                 }
             }),
             _ => unreachable!(),
