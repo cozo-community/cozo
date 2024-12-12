@@ -223,8 +223,8 @@ impl<'a> SessionTx<'a> {
         force_collect: &str,
         span: SourceSpan,
     ) -> Result<()> {
-        let is_callback_target = callback_targets.contains(&relation_store.name)
-            || force_collect == relation_store.name;
+        let is_callback_target =
+            callback_targets.contains(&relation_store.name) || force_collect == relation_store.name;
 
         if relation_store.access_level < AccessLevel::Protected {
             bail!(InsufficientAccessLevel(
@@ -533,8 +533,8 @@ impl<'a> SessionTx<'a> {
         force_collect: &str,
         span: SourceSpan,
     ) -> Result<()> {
-        let is_callback_target = callback_targets.contains(&relation_store.name)
-            || force_collect == relation_store.name;
+        let is_callback_target =
+            callback_targets.contains(&relation_store.name) || force_collect == relation_store.name;
 
         if relation_store.access_level < AccessLevel::Protected {
             bail!(InsufficientAccessLevel(
@@ -978,7 +978,12 @@ impl<'a> SessionTx<'a> {
                     });
                 }
             }
-            if need_to_collect || has_indices || has_hnsw_indices || has_fts_indices || has_lsh_indices {
+            if need_to_collect
+                || has_indices
+                || has_hnsw_indices
+                || has_fts_indices
+                || has_lsh_indices
+            {
                 if let Some(existing) = self.store_tx.get(&key, false)? {
                     let mut tup = extracted.clone();
                     extend_tuple_from_v(&mut tup, &existing);

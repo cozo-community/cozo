@@ -15,7 +15,7 @@
 //!
 //! Rust API usage:
 //! ```
-//! use cozo::*;
+//! use cozo_ce::*;
 //!
 //! let db = DbInstance::new("mem", "", Default::default()).unwrap();
 //! let script = "?[a] := a in [1, 2, 3]";
@@ -27,7 +27,7 @@
 //!
 #![doc = document_features::document_features!()]
 #![warn(rust_2018_idioms, future_incompatible)]
-#![warn(missing_docs)]
+// #![warn(missing_docs)]
 #![allow(clippy::type_complexity)]
 #![allow(clippy::too_many_arguments)]
 
@@ -58,10 +58,10 @@ pub use runtime::db::NamedRows;
 pub use runtime::relation::decode_tuple_from_kv;
 pub use runtime::temp_store::RegularTempStore;
 pub use storage::mem::{new_cozo_mem, MemStorage};
+#[cfg(feature = "storage-new-rocksdb")]
+pub use storage::newrocks::{new_cozo_newrocksdb, NewRocksDbOpts, NewRocksDbStorage};
 #[cfg(feature = "storage-rocksdb")]
 pub use storage::rocks::{new_cozo_rocksdb, RocksDbStorage};
-#[cfg(feature = "storage-new-rocksdb")]
-pub use storage::newrocks::{new_cozo_newrocksdb, NewRocksDbStorage};
 #[cfg(feature = "storage-sled")]
 pub use storage::sled::{new_cozo_sled, SledStorage};
 #[cfg(feature = "storage-sqlite")]
@@ -92,6 +92,8 @@ pub(crate) mod query;
 pub(crate) mod runtime;
 pub(crate) mod storage;
 pub(crate) mod utils;
+
+use rayon::spawn;
 
 /// A dispatcher for concrete storage implementations, wrapping [Db]. This is done so that
 /// client code does not have to deal with generic code constantly. You may prefer to use
@@ -155,7 +157,10 @@ impl DbInstance {
             #[cfg(feature = "storage-rocksdb")]
             "rocksdb" => Self::RocksDb(new_cozo_rocksdb(path)?),
             #[cfg(feature = "storage-new-rocksdb")]
-            "newrocksdb" => Self::NewRocksDb(new_cozo_newrocksdb(path)?),
+            "newrocksdb" => {
+                let opts: NewRocksDbOpts = serde_json::from_str(options).into_diagnostic()?;
+                Self::NewRocksDb(new_cozo_newrocksdb(path, opts)?)
+            }
             #[cfg(feature = "storage-sled")]
             "sled" => Self::Sled(new_cozo_sled(path)?),
             #[cfg(feature = "storage-tikv")]

@@ -904,8 +904,8 @@ impl<'a> SessionTx<'a> {
                 Some(x) => x as usize,
                 None => {
                     // this occurs if the index is empty
-                    return Ok(vec![])
-                },
+                    return Ok(vec![]);
+                }
             };
             let ep_t_key = ep[1..config.base_handle.metadata.keys.len() + 1].to_vec();
             let ep_subidx = ep[config.base_handle.metadata.keys.len() + 2]

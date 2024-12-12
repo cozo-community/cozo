@@ -26,6 +26,7 @@ use serde_json::{json, Value};
 use smartstring::SmartString;
 use unicode_normalization::UnicodeNormalization;
 use uuid::v1::Timestamp;
+use uuid_simd::UuidExt;
 
 use crate::data::expr::Op;
 use crate::data::json::JsonValue;

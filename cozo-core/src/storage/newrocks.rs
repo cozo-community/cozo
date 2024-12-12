@@ -5,7 +5,10 @@ use std::sync::Arc;
 use log::info;
 use miette::{miette, IntoDiagnostic, Result, WrapErr};
 
-use rocksdb::{OptimisticTransactionDB, Options, WriteBatchWithTransaction, DB};
+use rust_rocksdb::{
+    Cache, Env, LruCacheOptions, OptimisticTransactionDB, Options, Range,
+    WriteBatchWithTransaction, WriteBufferManager, DB,
+};
 
 use crate::data::tuple::{check_key_for_validity, Tuple};
 use crate::data::value::ValidityTs;
@@ -17,11 +20,34 @@ use crate::Db;
 const KEY_PREFIX_LEN: usize = 9;
 const CURRENT_STORAGE_VERSION: u64 = 3;
 
+#[derive(serde_derive::Deserialize)]
+#[serde(default)]
+pub struct NewRocksDbOpts {
+    lru_cache_mb: Option<usize>,
+    write_buffer_mb: Option<usize>,
+    enable_write_buffer_manager: bool,
+    allow_stall: bool,
+}
+
+impl Default for NewRocksDbOpts {
+    fn default() -> Self {
+        Self {
+            lru_cache_mb: None,
+            write_buffer_mb: None,
+            enable_write_buffer_manager: false,
+            allow_stall: false,
+        }
+    }
+}
+
 /// Creates a RocksDB database object.
 /// This is currently the fastest persistent storage and it can
 /// sustain huge concurrency.
 /// Supports concurrent readers and writers.
-pub fn new_cozo_newrocksdb(path: impl AsRef<Path>) -> Result<Db<NewRocksDbStorage>> {
+pub fn new_cozo_newrocksdb(
+    path: impl AsRef<Path>,
+    opts: NewRocksDbOpts,
+) -> Result<Db<NewRocksDbStorage>> {
     fs::create_dir_all(&path).map_err(|err| {
         BadDbInit(format!(
             "cannot create directory {}: {}",
@@ -29,7 +55,15 @@ pub fn new_cozo_newrocksdb(path: impl AsRef<Path>) -> Result<Db<NewRocksDbStorag
             err
         ))
     })?;
-    let path_buf = path.as_ref().to_path_buf();
+
+    let path_ref = path.as_ref();
+    let path_buf = path_ref.to_path_buf();
+
+    // extract option values
+    let lru_cache_mb = opts.lru_cache_mb.unwrap_or(64);
+    let write_buffer_mb = opts.write_buffer_mb.unwrap_or(128);
+    let enable_write_buffer_manager = opts.enable_write_buffer_manager;
+    let allow_stall = opts.allow_stall;
 
     let manifest_path = path_buf.join("manifest");
     let is_new = if manifest_path.exists() {
@@ -63,13 +97,41 @@ pub fn new_cozo_newrocksdb(path: impl AsRef<Path>) -> Result<Db<NewRocksDbStorag
     let store_path = path_buf.join("data");
     let store_path_str = store_path.to_str().ok_or(miette!("bad path name"))?;
 
-    let mut options = Options::default();
-    options.create_if_missing(is_new);
-    // Add any necessary RocksDB options here
-
-    let db = OptimisticTransactionDB::open(&options, store_path_str)
+    // Find the options file in the directory (arbitrary name in format OPTIONS-00xxx)
+    let options_file_exists = fs::read_dir(&path_buf)
         .into_diagnostic()
-        .wrap_err("Failed to open RocksDB")?;
+        .wrap_err("Failed to read directory")?
+        .filter_map(Result::ok)
+        .any(|entry| entry.file_name().to_string_lossy().starts_with("OPTIONS-"));
+
+    let (mut options, column_families) = if !options_file_exists {
+        (Options::default(), Vec::new())
+    } else {
+        println!("Loading options from {:?}", path_ref);
+        let lru_cache = Cache::new_lru_cache(lru_cache_mb * 1024 * 1024);
+
+        Options::load_latest(&path_ref, Env::new().unwrap(), true, lru_cache).unwrap()
+    };
+
+    options.create_if_missing(is_new);
+
+    if enable_write_buffer_manager {
+        let wbm = WriteBufferManager::new_write_buffer_manager(
+            write_buffer_mb * 1024 * 1024,
+            allow_stall,
+        );
+        options.set_write_buffer_manager(&wbm);
+    }
+
+    let db = if column_families.len() > 0 {
+        OptimisticTransactionDB::open_cf_descriptors(&options, store_path_str, column_families)
+            .into_diagnostic()
+            .wrap_err("Failed to open RocksDB")?
+    } else {
+        OptimisticTransactionDB::open(&options, store_path_str)
+            .into_diagnostic()
+            .wrap_err("Failed to open RocksDB")?
+    };
 
     let ret = Db::new(NewRocksDbStorage::new(db))?;
     ret.initialize()?;
@@ -97,6 +159,7 @@ impl<'s> Storage<'s> for NewRocksDbStorage {
 
     fn transact(&'s self, _write: bool) -> Result<Self::Tx> {
         Ok(NewRocksDbTx {
+            db: self.db.clone(),
             db_tx: Some(self.db.transaction()),
         })
     }
@@ -123,7 +186,8 @@ impl<'s> Storage<'s> for NewRocksDbStorage {
 }
 
 pub struct NewRocksDbTx<'a> {
-    db_tx: Option<rocksdb::Transaction<'a, OptimisticTransactionDB>>,
+    db: Arc<OptimisticTransactionDB>,
+    db_tx: Option<rust_rocksdb::Transaction<'a, OptimisticTransactionDB>>,
 }
 
 unsafe impl<'a> Sync for NewRocksDbTx<'a> {}
@@ -193,9 +257,9 @@ impl<'s> StoreTx<'s> for NewRocksDbTx<'s> {
     fn del_range_from_persisted(&mut self, lower: &[u8], upper: &[u8]) -> Result<()> {
         match self.db_tx {
             Some(ref mut db_tx) => {
-                let iter = db_tx.iterator(rocksdb::IteratorMode::From(
+                let iter = db_tx.iterator(rust_rocksdb::IteratorMode::From(
                     lower,
-                    rocksdb::Direction::Forward,
+                    rust_rocksdb::Direction::Forward,
                 ));
                 for item in iter {
                     let (k, _) = item
@@ -246,9 +310,9 @@ impl<'s> StoreTx<'s> for NewRocksDbTx<'s> {
     {
         match &self.db_tx {
             Some(db_tx) => Box::new(NewRocksDbIterator {
-                inner: db_tx.iterator(rocksdb::IteratorMode::From(
+                inner: db_tx.iterator(rust_rocksdb::IteratorMode::From(
                     lower,
-                    rocksdb::Direction::Forward,
+                    rust_rocksdb::Direction::Forward,
                 )),
                 upper_bound: upper.to_vec(),
             }),
@@ -266,9 +330,9 @@ impl<'s> StoreTx<'s> for NewRocksDbTx<'s> {
     ) -> Box<dyn Iterator<Item = Result<Tuple>> + 'a> {
         match self.db_tx {
             Some(ref db_tx) => Box::new(NewRocksDbSkipIterator {
-                inner: db_tx.iterator(rocksdb::IteratorMode::From(
+                inner: db_tx.iterator(rust_rocksdb::IteratorMode::From(
                     lower,
-                    rocksdb::Direction::Forward,
+                    rust_rocksdb::Direction::Forward,
                 )),
                 upper_bound: upper.to_vec(),
                 valid_at,
@@ -290,9 +354,9 @@ impl<'s> StoreTx<'s> for NewRocksDbTx<'s> {
     {
         match self.db_tx {
             Some(ref db_tx) => {
-                let iter = db_tx.iterator(rocksdb::IteratorMode::From(
+                let iter = db_tx.iterator(rust_rocksdb::IteratorMode::From(
                     lower,
-                    rocksdb::Direction::Forward,
+                    rust_rocksdb::Direction::Forward,
                 ));
                 Box::new(NewRocksDbIteratorRaw {
                     inner: iter,
@@ -313,9 +377,9 @@ impl<'s> StoreTx<'s> for NewRocksDbTx<'s> {
             .db_tx
             .as_ref()
             .ok_or(miette!("Transaction already committed"))?;
-        let iter = db_tx.iterator(rocksdb::IteratorMode::From(
+        let iter = db_tx.iterator(rust_rocksdb::IteratorMode::From(
             lower,
-            rocksdb::Direction::Forward,
+            rust_rocksdb::Direction::Forward,
         ));
         let count = iter
             .take_while(|item| match item {
@@ -331,20 +395,53 @@ impl<'s> StoreTx<'s> for NewRocksDbTx<'s> {
         's: 'a,
     {
         match self.db_tx {
-            Some(ref db_tx) => Box::new(db_tx.iterator(rocksdb::IteratorMode::Start).map(|item| {
-                item.map(|(k, v)| (k.to_vec(), v.to_vec()))
-                    .into_diagnostic()
-                    .wrap_err_with(|| "Error during total scan")
-            })),
+            Some(ref db_tx) => Box::new(db_tx.iterator(rust_rocksdb::IteratorMode::Start).map(
+                |item| {
+                    item.map(|(k, v)| (k.to_vec(), v.to_vec()))
+                        .into_diagnostic()
+                        .wrap_err_with(|| "Error during total scan")
+                },
+            )),
             None => Box::new(std::iter::once(Err(miette!(
                 "Transaction already committed"
             )))),
         }
     }
+
+    #[cfg(feature = "storage-new-rocksdb")]
+    fn approximate_count(&self, range: &Range<&[u8]>) -> Result<usize> {
+        // Create a new Range<Vec<u8>> from the input range
+        let range = rust_rocksdb::Range {
+            start: range.start.to_vec(),
+            end: range.end.to_vec(),
+        };
+        let ranges = vec![range];
+
+        let sizes = self
+            .db
+            .approximate_sizes(&ranges)
+            .into_diagnostic()
+            .wrap_err("Failed to get approximate sizes")?;
+
+        let size_in_bytes = sizes
+            .get(0)
+            .ok_or(miette!("Failed to get approximate size"))?;
+
+        // Estimate the average size per key-value pair (you may need to adjust this)
+        let average_entry_size = 100; // Example value in bytes
+
+        // Calculate approximate count
+        let approximate_count = (size_in_bytes / average_entry_size as u64) as usize;
+
+        Ok(approximate_count)
+    }
 }
 
 pub(crate) struct NewRocksDbIterator<'a> {
-    inner: rocksdb::DBIteratorWithThreadMode<'a, rocksdb::Transaction<'a, OptimisticTransactionDB>>,
+    inner: rust_rocksdb::DBIteratorWithThreadMode<
+        'a,
+        rust_rocksdb::Transaction<'a, OptimisticTransactionDB>,
+    >,
     upper_bound: Vec<u8>,
 }
 
@@ -368,7 +465,10 @@ impl<'a> Iterator for NewRocksDbIterator<'a> {
 }
 
 pub(crate) struct NewRocksDbSkipIterator<'a> {
-    inner: rocksdb::DBIteratorWithThreadMode<'a, rocksdb::Transaction<'a, OptimisticTransactionDB>>,
+    inner: rust_rocksdb::DBIteratorWithThreadMode<
+        'a,
+        rust_rocksdb::Transaction<'a, OptimisticTransactionDB>,
+    >,
     upper_bound: Vec<u8>,
     valid_at: ValidityTs,
     next_bound: Vec<u8>,
@@ -379,9 +479,9 @@ impl<'a> Iterator for NewRocksDbSkipIterator<'a> {
 
     fn next(&mut self) -> Option<Self::Item> {
         loop {
-            self.inner.set_mode(rocksdb::IteratorMode::From(
+            self.inner.set_mode(rust_rocksdb::IteratorMode::From(
                 &self.next_bound,
-                rocksdb::Direction::Forward,
+                rust_rocksdb::Direction::Forward,
             ));
             match self.inner.next() {
                 None => return None,
@@ -405,7 +505,10 @@ impl<'a> Iterator for NewRocksDbSkipIterator<'a> {
 }
 
 pub(crate) struct NewRocksDbIteratorRaw<'a> {
-    inner: rocksdb::DBIteratorWithThreadMode<'a, rocksdb::Transaction<'a, OptimisticTransactionDB>>,
+    inner: rust_rocksdb::DBIteratorWithThreadMode<
+        'a,
+        rust_rocksdb::Transaction<'a, OptimisticTransactionDB>,
+    >,
     upper_bound: Vec<u8>,
 }
 
@@ -436,7 +539,7 @@ mod tests {
 
     fn setup_test_db() -> Result<(TempDir, Db<NewRocksDbStorage>)> {
         let temp_dir = TempDir::new().into_diagnostic()?;
-        let db = new_cozo_newrocksdb(temp_dir.path())?;
+        let db = new_cozo_newrocksdb(temp_dir.path(), NewRocksDbOpts::default())?;
 
         // Create test tables with proper ScriptMutability parameter
         db.run_script(
@@ -494,12 +597,12 @@ mod tests {
                 rows: vec![
                     vec![
                         DataValue::from(1),
-                        DataValue::Validity(Validity::from((0, true))),
+                        DataValue::Validity(Validity::from((1, true))),
                         DataValue::from(100),
                     ],
                     vec![
                         DataValue::from(1),
-                        DataValue::Validity(Validity::from((1, true))),
+                        DataValue::Validity(Validity::from((2, true))),
                         DataValue::from(200),
                     ],
                 ],
@@ -510,14 +613,14 @@ mod tests {
 
         // Query at different timestamps
         let result = db.run_script(
-            "?[v] := *tt_test{k: 1, v @ 0}",
+            "?[v] := *tt_test{k: 1, v @ 1}",
             Default::default(),
             ScriptMutability::Immutable,
         )?;
         assert_eq!(result.rows[0][0], DataValue::from(100));
 
         let result = db.run_script(
-            "?[v] := *tt_test{k: 1, v @ 1}",
+            "?[v] := *tt_test{k: 1, v @ 2}",
             Default::default(),
             ScriptMutability::Immutable,
         )?;

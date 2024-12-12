@@ -7,13 +7,17 @@
  */
 
 use itertools::Itertools;
-use miette::Result;
+use miette::{miette, Result};
 
 use crate::data::tuple::Tuple;
 use crate::data::value::ValidityTs;
 use crate::decode_tuple_from_kv;
 
 pub(crate) mod mem;
+#[cfg(feature = "storage-new-rocksdb")]
+pub mod newrocks;
+#[cfg(feature = "storage-new-rocksdb")]
+use rust_rocksdb::Range;
 #[cfg(feature = "storage-rocksdb")]
 pub(crate) mod rocks;
 #[cfg(feature = "storage-sled")]
@@ -23,8 +27,6 @@ pub(crate) mod sqlite;
 pub(crate) mod temp;
 #[cfg(feature = "storage-tikv")]
 pub(crate) mod tikv;
-#[cfg(feature = "storage-new-rocksdb")]
-pub mod newrocks;
 // pub(crate) mod re;
 
 /// Swappable storage trait for Cozo's storage engine
@@ -162,4 +164,9 @@ pub trait StoreTx<'s>: Sync {
     fn total_scan<'a>(&'a self) -> Box<dyn Iterator<Item = Result<(Vec<u8>, Vec<u8>)>> + 'a>
     where
         's: 'a;
+    /// Estimate the number of rows in the range.
+    #[cfg(feature = "storage-new-rocksdb")]
+    fn approximate_count(&self, range: &Range<&[u8]>) -> Result<usize> {
+        Ok(0)
+    }
 }

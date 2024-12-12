@@ -20,7 +20,7 @@ use rustyline::history::DefaultHistory;
 use rustyline::Changeset;
 use serde_json::{json, Value};
 
-use cozo::{evaluate_expressions, DataValue, DbInstance, NamedRows, ScriptMutability};
+use cozo_ce::{evaluate_expressions, DataValue, DbInstance, NamedRows, ScriptMutability};
 
 struct Indented;
 
