@@ -33,7 +33,6 @@ use crate::runtime::transact::SessionTx;
 use crate::storage::StoreTx;
 use crate::utils::swap_option_result;
 
-
 #[cfg(feature = "storage-new-rocksdb")]
 use rust_rocksdb::Range;
 
@@ -74,9 +73,9 @@ impl RelAlgebra {
     fn estimate_size(&self, tx: &SessionTx<'_>) -> Result<usize> {
         match self {
             RelAlgebra::Fixed(f) => Ok(f.data.len()),
-            
+
             RelAlgebra::TempStore(r) => Ok(0),
-            
+
             RelAlgebra::Stored(r) => {
                 let lower = vec![].encode_as_key(r.storage.id);
                 let upper = vec![].encode_as_key(r.storage.id.next());
@@ -86,7 +85,7 @@ impl RelAlgebra {
                 };
                 tx.store_tx.approximate_count(&range)
             }
-            
+
             RelAlgebra::StoredWithValidity(r) => {
                 let lower = vec![].encode_as_key(r.storage.id);
                 let upper = vec![].encode_as_key(r.storage.id.next());
@@ -96,26 +95,26 @@ impl RelAlgebra {
                 };
                 tx.store_tx.approximate_count(&range)
             }
-            
+
             RelAlgebra::Join(j) => {
                 // For joins, estimate based on the smaller relation
                 let left_size = j.left.estimate_size(tx)?;
                 let right_size = j.right.estimate_size(tx)?;
                 Ok(std::cmp::min(left_size, right_size))
             }
-            
+
             RelAlgebra::NegJoin(j) => j.left.estimate_size(tx),
-            
+
             RelAlgebra::Reorder(r) => r.relation.estimate_size(tx),
-            
+
             RelAlgebra::Filter(f) => f.parent.estimate_size(tx),
-            
+
             RelAlgebra::Unification(u) => u.parent.estimate_size(tx),
-            
+
             RelAlgebra::HnswSearch(s) => s.parent.estimate_size(tx),
-            
+
             RelAlgebra::FtsSearch(s) => s.parent.estimate_size(tx),
-            
+
             RelAlgebra::LshSearch(s) => s.parent.estimate_size(tx),
         }
     }
@@ -1810,16 +1809,16 @@ impl TempStoreRA {
                                     return Ok(None);
                                 }
                             }
-                                    let mut ret = tuple.clone();
-                                    ret.extend(found);
-                                    Ok(Some(ret))
-                                }
-                            })
-                            .filter_map(swap_option_result),
-                        )
+                            let mut ret = tuple.clone();
+                            ret.extend(found);
+                            Ok(Some(ret))
+                        }
                     })
-                    .flatten_ok()
-                    .map(flatten_err);
+                    .filter_map(swap_option_result),
+                )
+            })
+            .flatten_ok()
+            .map(flatten_err);
         Ok(if eliminate_indices.is_empty() {
             Box::new(it)
         } else {
@@ -2421,7 +2420,7 @@ where
 {
     type Item = Result<Tuple>;
 
-    fn next(&mut self)  -> Option<Self::Item> {
+    fn next(&mut self) -> Option<Self::Item> {
         loop {
             // Process current matches if any
             if let Some((left_tuple, matches)) = &self.current_matches {

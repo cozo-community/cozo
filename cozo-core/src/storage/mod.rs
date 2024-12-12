@@ -7,7 +7,7 @@
  */
 
 use itertools::Itertools;
-use miette::{Result, miette};
+use miette::{miette, Result};
 
 use crate::data::tuple::Tuple;
 use crate::data::value::ValidityTs;

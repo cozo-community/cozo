@@ -836,9 +836,10 @@ fn parse_rule_head_arg(
             (
                 Symbol::new(var.as_str(), var.extract_span()),
                 Some((
-                    parse_aggr(aggr_name)
-                        .ok_or_else(|| AggrNotFound(aggr_name.to_string(), aggr_p.extract_span()))?
-                        .clone(),
+                    parse_aggr(aggr_name).ok_or_else(|| {
+                        AggrNotFound(aggr_name.to_string(), aggr_p.extract_span())
+                    })?,
+                    // .clone(),
                     args,
                 )),
             )

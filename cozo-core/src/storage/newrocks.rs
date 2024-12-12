@@ -6,8 +6,8 @@ use log::info;
 use miette::{miette, IntoDiagnostic, Result, WrapErr};
 
 use rust_rocksdb::{
-    Cache, Env, LruCacheOptions, OptimisticTransactionDB, Options, Range, WriteBatchWithTransaction,
-    WriteBufferManager, DB,
+    Cache, Env, LruCacheOptions, OptimisticTransactionDB, Options, Range,
+    WriteBatchWithTransaction, WriteBufferManager, DB,
 };
 
 use crate::data::tuple::{check_key_for_validity, Tuple};
@@ -416,12 +416,15 @@ impl<'s> StoreTx<'s> for NewRocksDbTx<'s> {
             end: range.end.to_vec(),
         };
         let ranges = vec![range];
-        
-        let sizes = self.db.approximate_sizes(&ranges)
+
+        let sizes = self
+            .db
+            .approximate_sizes(&ranges)
             .into_diagnostic()
             .wrap_err("Failed to get approximate sizes")?;
 
-        let size_in_bytes = sizes.get(0)
+        let size_in_bytes = sizes
+            .get(0)
             .ok_or(miette!("Failed to get approximate size"))?;
 
         // Estimate the average size per key-value pair (you may need to adjust this)
